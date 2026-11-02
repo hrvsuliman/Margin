@@ -21,14 +21,33 @@ It is built entirely from Windows. You never need a Mac or Xcode on your own com
 |---|---|---|
 | 0 | Build pipeline proof: one screen, icon, CI, unsigned .ipa | ✅ Tested on iPhone |
 | 1 | Navigation, Today screen, subjects, timetable, tasks, exams, calendar, reminders, settings, backup | ✅ Tested on iPhone |
-| 2 | Handwriting studio: capture, profile, analysis, rendering, note editor, paper styles, PDF export, notes library | **Built, waiting for you to test on the iPhone** |
-| 3 | Exam planner: topics, understanding tracker, roadmap, readiness | Not started |
-| 4 | AI learning assistant | Not started |
+| 2 | Handwriting studio: pen-and-paper scan, profile, analysis, rendering, note editor, paper styles, PDF export, notes library | ✅ Tested on iPhone (finger capture → reworked to pen & paper) |
+| 3 | Learning: exams with topics, understanding tracker, learning plan, focus timer, flashcards in your handwriting, readiness, statistics, grades, images in notes, Lernzettel | **Built, waiting for you to test** |
+| 4 | Claude: in-app learning assistant + MCP server for Claude Code / Claude Desktop | **Built, waiting for you to test** |
 | 5 | Polish | Not started |
 
 Each phase starts only after the previous one builds and you've tested it on your iPhone. The plan and the technical decisions (including how the handwriting will work, honestly) are in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 The app's interface is **German** (dates, Monday-first weeks, German school terms).
+
+### Phases 3 and 4: what to check on your iPhone
+
+Install over the current version – the database migrates automatically (version 3). **Save a backup first.**
+
+The tabs are now: **Heute · Planer** (calendar and tasks, switch at the top) **· Fächer · Lernen · Notizen**.
+
+1. **Prüfung mit Themen:** Lernen › + › Prüfung (or open an existing exam). *Themen auswählen* – pick topics of the subject or type new ones. Tap the five dots next to a topic to rate your understanding.
+2. **Lernplan:** *Lernplan erstellen*. Set *Höchstens pro Tag* and your learning days. Sessions appear in the plan, in the calendar and on Heute. Long-press a session to tick it off, skip or move it. Missed sessions → *Rest neu verteilen*.
+3. **Nächster Schritt:** on Heute and in Lernen – tap it, the focus timer starts with the right topic.
+4. **Fokuszeit:** 15/25/45/60 minutes, works with the phone locked (notification at the end). Afterwards rate your understanding.
+5. **Karteikarten:** in a note write lines like `Mitose :: Zellteilung mit gleichem Erbgut` → leaving the note creates cards. Lernen › cards › *fällige lernen*: cards appear on an index card **in your handwriting**, tap to flip, rate *Nochmal / Schwer / Gut / Leicht*.
+6. **Bereitschaft:** the ring per exam combines understanding, practice results, finished material and how long ago you studied.
+7. **Statistik:** Lernen › *Diese Woche* – learning time per subject, practice results, understanding levels, topics that need work. No streaks.
+8. **Noten:** Fächer › Noten. Enter grades (1–6 with +/- or 0–15 points, switch in Settings), set the written/oral weighting and a goal – Margin says what you need in the next test.
+9. **Bilder in Notizen:** in a note ↓ › *Bild einkleben* – the photo is glued onto the handwritten page (with tape). *Bilder* to change size, caption or remove it.
+10. **Lernzettel:** on a topic (Fächer › subject › topic) *Lernzettel erstellen* – collects notes, subtopics and flashcards into a handwritten sheet to print.
+11. **Claude (optional):** Lernen › *Claude fragen*. First screen explains what is sent; paste your own API key from console.anthropic.com. Try: attach a photo of a worksheet → *Erklär mir das einfacher*, *Mach Karteikarten daraus*, *Frag mich ab*. Before Claude changes anything in Margin you get an *Erlauben / Ablehnen* card. In a note the ✦ button asks Claude about that note.
+12. **Claude am PC (MCP):** see [Claude on your PC](#claude-on-your-pc-mcp) below.
 
 ### Phase 2: what to check on your iPhone
 
@@ -185,6 +204,19 @@ Now Margin opens.
 
 ---
 
+## Claude on your PC (MCP)
+
+Margin can act as an **MCP server** while it's open, so Claude Code or Claude Desktop on your Windows PC can read (and, if you allow it, add to) your school data – e.g. *"What do I have to do this week?"* or *"Turn this script into flashcards in Margin."*
+
+1. iPhone and PC in the **same Wi-Fi**.
+2. Margin › Einstellungen › *Claude am PC verbinden (MCP)* › **Verbindung erlauben** (iOS asks once for local-network access – allow it). Optionally *Claude darf Änderungen machen*.
+3. Copy the command shown there:
+   - **Claude Code:** paste it into a terminal on the PC (`claude mcp add --transport http margin http://<iPhone-IP>:8765/mcp --header "Authorization: Bearer <key>"`). Then ask Claude Code about Margin.
+   - **Claude Desktop:** copy the JSON block into `claude_desktop_config.json` (needs Node.js, uses `mcp-remote`), restart Claude Desktop.
+4. Keep Margin **open in the foreground** while you use it (iOS doesn't allow servers in the background; the display stays on while the connection is allowed).
+
+Security: only devices in your Wi-Fi that know the access key can connect; *Neuen Schlüssel erzeugen* locks out old setups. The connection is plain HTTP inside your home network – don't enable it on public Wi-Fi.
+
 ## When a build fails
 
 1. Open the failed run on GitHub and click the red step (usually **Build for iPhone**).
@@ -206,10 +238,12 @@ Margin/
 │  ├─ DesignSystem/            Colours, rows, shared UI pieces
 │  ├─ Models/                  SwiftData models (subjects, lessons, tasks, exams …)
 │  ├─ Persistence/             Database setup + migrations, attachments, backup
-│  ├─ Services/                Calendar maths, timetable, reminders, text import (no UI)
+│  ├─ Services/                Calendar maths, timetable, reminders, text import, learning engines
+│  │                           (plan, spaced repetition, readiness, grades), Claude client + tools, MCP server
 │  ├─ Handwriting/             Stroke storage, analysis, ink outlines, font, page layout, PDF
 │  ├─ Settings/                User preferences (school type, bell schedule …)
-│  ├─ Features/                One folder per area: Today, Calendar, Subjects, Tasks, Exams, Notes, Handwriting, Settings
+│  ├─ Features/                One folder per area: Today, Calendar, Subjects, Tasks, Exams, Learn, Grades,
+│  │                           Notes, Handwriting, Assistant, Settings
 │  ├─ Support/                 German dates and formatting, build info
 │  └─ Resources/Assets.xcassets  App icon
 ├─ MarginTests/                Unit tests (run on a simulator in CI)
@@ -224,4 +258,4 @@ Margin/
 - Swift 6 compiler in Swift 5 language mode, built with Xcode 16.4 on GitHub's `macos-15` runner.
 - Minimum iOS: 17.0. iPhone only, portrait.
 - Bundle ID: `com.hrvsuliman.margin`.
-- No third-party libraries.
+- No third-party libraries. Claude is called over plain HTTPS (there is no official Swift SDK); the API key lives only in the iOS Keychain.

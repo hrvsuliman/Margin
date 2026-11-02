@@ -61,6 +61,7 @@ final class AppSettings {
     var defaultTaskReminder: DefaultTaskReminder {
         didSet { defaults.set(defaultTaskReminder.rawValue, forKey: Keys.taskReminder) }
     }
+    var gradeScale: GradeScale { didSet { defaults.set(gradeScale.rawValue, forKey: Keys.gradeScale) } }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -69,6 +70,8 @@ final class AppSettings {
         appearance = Appearance(rawValue: defaults.string(forKey: Keys.appearance) ?? "") ?? .system
         defaultTaskReminder = DefaultTaskReminder(rawValue: defaults.string(forKey: Keys.taskReminder) ?? "")
             ?? .eveningBefore
+        gradeScale = GradeScale(rawValue: defaults.string(forKey: Keys.gradeScale) ?? "")
+            ?? ((SchoolType(rawValue: defaults.string(forKey: Keys.schoolType) ?? "") == .oberstufe) ? .points : .grades)
         if let data = defaults.data(forKey: Keys.periods),
            let stored = try? JSONDecoder().decode([Period].self, from: data) {
             periods = stored
@@ -98,6 +101,7 @@ final class AppSettings {
         static let periods = "settings.periods"
         static let appearance = "settings.appearance"
         static let taskReminder = "settings.defaultTaskReminder"
+        static let gradeScale = "settings.gradeScale"
     }
 }
 
@@ -108,6 +112,8 @@ struct SettingsSnapshot: Codable {
     var periods: [Period]
     var appearance: Appearance
     var defaultTaskReminder: DefaultTaskReminder
+    /// Optional: backups from before grades existed don't have it.
+    var gradeScale: GradeScale?
 
     @MainActor
     init(_ settings: AppSettings) {
@@ -116,6 +122,7 @@ struct SettingsSnapshot: Codable {
         periods = settings.periods
         appearance = settings.appearance
         defaultTaskReminder = settings.defaultTaskReminder
+        gradeScale = settings.gradeScale
     }
 
     @MainActor
@@ -125,5 +132,6 @@ struct SettingsSnapshot: Codable {
         settings.periods = periods
         settings.appearance = appearance
         settings.defaultTaskReminder = defaultTaskReminder
+        if let gradeScale { settings.gradeScale = gradeScale }
     }
 }

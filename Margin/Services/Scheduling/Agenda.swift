@@ -7,6 +7,7 @@ enum AgendaSource {
     case task(SchoolTask)
     case event(CalendarEvent)
     case holiday(Holiday)
+    case session(StudySession)
 }
 
 /// One entry in the calendar or on the Today screen.
@@ -29,8 +30,14 @@ struct AgendaItem: Identifiable {
         case .exam: 1
         case .task: 2
         case .event: 3
-        case .lesson: 4
+        case .session: 4
+        case .lesson: 5
         }
+    }
+
+    var isSession: Bool {
+        if case .session = source { return true }
+        return false
     }
 
     var isLesson: Bool {
@@ -66,6 +73,10 @@ struct Agenda {
     var events: [CalendarEvent]
     var holidays: [Holiday]
     var calendar: Calendar = .school
+    var sessions: [StudySession] = []
+    /// Topic and subject lookups for naming and colouring study sessions.
+    var topics: [Topic] = []
+    var subjects: [SchoolSubject] = []
 
     func holiday(on day: Date) -> Holiday? {
         holidays.first { $0.contains(day, calendar: calendar) }
@@ -142,6 +153,20 @@ struct Agenda {
                     symbol: event.category.symbol, isDone: false
                 ))
             }
+        }
+
+        for session in sessions where session.status != .skipped && calendar.isDate(session.date, inSameDayAs: dayStart) {
+            let topic = session.topicUID.flatMap { id in topics.first { $0.uid == id } }
+            let subject = session.subjectUID.flatMap { id in subjects.first { $0.uid == id } } ?? topic?.subject
+            let end = session.date.addingTimeInterval(Double(max(session.plannedMinutes, 5)) * 60)
+            items.append(AgendaItem(
+                id: "session-\(session.uid)", source: .session(session),
+                title: [topic?.title, session.kind.title].compactMap { $0 }.joined(separator: " · "),
+                detail: session.status == .done ? "erledigt · \(session.actualMinutes) Min." : "Lernen · \(session.plannedMinutes) Min.",
+                start: session.date, end: end, isAllDay: false,
+                color: subject?.color.color ?? Palette.marginRed,
+                symbol: session.kind.symbol, isDone: session.status == .done
+            ))
         }
 
         return items.sorted { a, b in

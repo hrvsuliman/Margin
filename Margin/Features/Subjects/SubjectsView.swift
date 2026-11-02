@@ -17,6 +17,12 @@ struct SubjectsView: View {
                         Label("Stundenplan", systemImage: "tablecells")
                             .foregroundStyle(Palette.ink)
                     }
+                    NavigationLink {
+                        GradesView()
+                    } label: {
+                        Label("Noten", systemImage: "chart.bar.doc.horizontal")
+                            .foregroundStyle(Palette.ink)
+                    }
                 }
                 .marginRow()
 

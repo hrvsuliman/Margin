@@ -194,6 +194,68 @@ struct NoteDetailsView: View {
     }
 }
 
+/// The pictures glued into a note: caption, size, remove.
+struct NoteImagesView: View {
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @Bindable var document: NoteDocument
+    @Query(sort: \NoteImage.createdAt) private var allImages: [NoteImage]
+
+    private var images: [NoteImage] { allImages.filter { $0.noteUID == document.uid } }
+
+    var body: some View {
+        List {
+            ForEach(images) { image in
+                Section {
+                    HStack(alignment: .top, spacing: 12) {
+                        if let cg = NoteImageLoader.image(at: AttachmentStore.directory.appendingPathComponent(image.storedName), maxPixels: 300) {
+                            Image(decorative: cg, scale: 1)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 80, height: 80)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                        }
+                        VStack(alignment: .leading) {
+                            TextField("Bildunterschrift (optional)", text: Binding(
+                                get: { image.caption }, set: { image.caption = $0; touch() }
+                            ))
+                            Stepper(value: Binding(get: { image.heightLines }, set: { image.heightLines = $0; touch() }), in: 3...16) {
+                                Text("Höhe: \(image.heightLines) Zeilen").font(.subheadline)
+                            }
+                        }
+                    }
+                    Button("Bild entfernen", role: .destructive) { remove(image) }
+                }
+                .marginRow()
+            }
+        }
+        .marginList()
+        .navigationTitle("Bilder")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Fertig") { dismiss() }
+            }
+        }
+    }
+
+    private func touch() {
+        document.updatedAt = .now
+        try? context.save()
+    }
+
+    private func remove(_ image: NoteImage) {
+        let line = NoteBlock.imageLine(image.uid)
+        document.body = document.body
+            .components(separatedBy: "\n")
+            .filter { $0.trimmingCharacters(in: .whitespaces) != line }
+            .joined(separator: "\n")
+        try? FileManager.default.removeItem(at: AttachmentStore.directory.appendingPathComponent(image.storedName))
+        context.delete(image)
+        touch()
+    }
+}
+
 /// A finished PDF, ready to look at and share.
 struct ExportFile: Identifiable {
     let id = UUID()

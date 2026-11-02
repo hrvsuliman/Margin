@@ -9,8 +9,8 @@ struct BackupFile: Codable {
     static let formatName = "margin-backup"
 
     var format: String = BackupFile.formatName
-    /// 1 = Phase 1, 2 = adds handwriting and notes.
-    var version: Int = 2
+    /// 1 = Phase 1, 2 = adds handwriting and notes, 3 = learning, grades, note images.
+    var version: Int = 3
     var exportedAt: Date = .now
     var appVersion: String = ""
     var settings: SettingsSnapshot?
@@ -27,6 +27,7 @@ struct BackupFile: Codable {
     var profiles: [ProfileDTO]?
     var glyphs: [GlyphDTO]?
     var notes: [NoteDTO]?
+    var learning: LearningDTO?
 
     struct SubjectDTO: Codable {
         var uid: UUID; var name: String; var colorKey: String; var teacher: String; var room: String
@@ -75,6 +76,48 @@ struct BackupFile: Codable {
         var uid: UUID; var character: String; var strokes: Data; var createdAt: Date
         var scale: Double; var baselineOffset: Double; var profile: UUID?
     }
+    /// Phase 3 data. Models are encoded as-is (they only hold plain values and ids).
+    struct LearningDTO: Codable {
+        var progress: [ProgressDTO] = []
+        var events: [EventLogDTO] = []
+        var plans: [PlanDTO] = []
+        var sessions: [SessionDTO] = []
+        var cards: [CardDTO] = []
+        var results: [ResultDTO] = []
+        var grades: [GradeDTO] = []
+        var gradeSetups: [GradeSetupDTO] = []
+        var images: [NoteImageDTO] = []
+    }
+    struct ProgressDTO: Codable {
+        var uid: UUID; var topic: UUID?; var understanding: Int; var completion: Double; var importance: Int
+        var estimatedMinutes: Int; var lastStudied: Date?; var updatedAt: Date
+    }
+    struct EventLogDTO: Codable { var uid: UUID; var topic: UUID?; var level: Int; var date: Date; var source: String }
+    struct PlanDTO: Codable {
+        var uid: UUID; var exam: UUID?; var topics: [UUID]; var dailyMinutes: Int; var weekdays: [Int]
+        var generatedAt: Date?; var createdAt: Date
+    }
+    struct SessionDTO: Codable {
+        var uid: UUID; var exam: UUID?; var topic: UUID?; var subject: UUID?; var kind: String; var status: String
+        var date: Date; var plannedMinutes: Int; var actualMinutes: Int; var completedAt: Date?; var isPlanned: Bool; var note: String
+    }
+    struct CardDTO: Codable {
+        var uid: UUID; var subject: UUID?; var topic: UUID?; var note: UUID?; var front: String; var back: String
+        var createdAt: Date; var ease: Double; var intervalDays: Int; var repetitions: Int; var lapses: Int
+        var due: Date; var lastReviewed: Date?
+    }
+    struct ResultDTO: Codable {
+        var uid: UUID; var topic: UUID?; var exam: UUID?; var subject: UUID?; var score: Double; var date: Date; var kind: String
+    }
+    struct GradeDTO: Codable {
+        var uid: UUID; var subject: UUID?; var exam: UUID?; var title: String; var value: Double; var kind: String
+        var weight: Double; var date: Date
+    }
+    struct GradeSetupDTO: Codable { var uid: UUID; var subject: UUID?; var writtenShare: Double; var goal: Double? }
+    struct NoteImageDTO: Codable {
+        var uid: UUID; var note: UUID?; var caption: String; var heightLines: Int; var createdAt: Date; var data: Data
+    }
+
     struct NoteDTO: Codable {
         var uid: UUID; var title: String; var body: String; var folder: String; var noteDate: Date
         var createdAt: Date; var updatedAt: Date
@@ -99,7 +142,7 @@ enum BackupError: LocalizedError {
 
 @MainActor
 enum BackupService {
-    private static func all<T: PersistentModel>(_ type: T.Type, _ context: ModelContext) -> [T] {
+    static func all<T: PersistentModel>(_ type: T.Type, _ context: ModelContext) -> [T] {
         (try? context.fetch(FetchDescriptor<T>())) ?? []
     }
 
@@ -175,6 +218,7 @@ enum BackupService {
             BackupFile.GlyphDTO(uid: $0.uid, character: $0.character, strokes: $0.strokeData, createdAt: $0.createdAt,
                                 scale: $0.scale, baselineOffset: $0.baselineOffset, profile: $0.profile?.uid)
         }
+        file.learning = exportLearning(context)
         file.notes = all(NoteDocument.self, context).map { note in
             BackupFile.NoteDTO(
                 uid: note.uid, title: note.title, body: note.body, folder: note.folder, noteDate: note.noteDate,
@@ -198,7 +242,7 @@ enum BackupService {
               file.format == BackupFile.formatName else {
             throw BackupError.notABackup
         }
-        guard file.version <= 2 else { throw BackupError.newerVersion }
+        guard file.version <= 3 else { throw BackupError.newerVersion }
         return file
     }
 
@@ -368,6 +412,10 @@ enum BackupService {
             context.insert(note)
         }
 
+        if let learning = file.learning {
+            try restoreLearning(learning, context: context)
+        }
+
         if let settings, let snapshot = file.settings {
             snapshot.apply(to: settings)
         }
@@ -388,8 +436,161 @@ enum BackupService {
         all(GlyphSample.self, context).forEach { context.delete($0) }
         all(HandwritingProfile.self, context).forEach { context.delete($0) }
         all(NoteDocument.self, context).forEach { context.delete($0) }
+        all(TopicProgress.self, context).forEach { context.delete($0) }
+        all(UnderstandingEvent.self, context).forEach { context.delete($0) }
+        all(ExamPlan.self, context).forEach { context.delete($0) }
+        all(StudySession.self, context).forEach { context.delete($0) }
+        all(Flashcard.self, context).forEach { context.delete($0) }
+        all(PracticeResult.self, context).forEach { context.delete($0) }
+        all(Grade.self, context).forEach { context.delete($0) }
+        all(GradeSetup.self, context).forEach { context.delete($0) }
+        all(NoteImage.self, context).forEach { context.delete($0) }
         try? context.save()
         AttachmentStore.removeAllFiles()
+    }
+}
+
+extension BackupService {
+    static func exportLearning(_ context: ModelContext) -> BackupFile.LearningDTO {
+        var dto = BackupFile.LearningDTO()
+        dto.progress = all(TopicProgress.self, context).map {
+            BackupFile.ProgressDTO(uid: $0.uid, topic: $0.topicUID, understanding: $0.understandingRaw, completion: $0.completion,
+                                   importance: $0.importance, estimatedMinutes: $0.estimatedMinutes,
+                                   lastStudied: $0.lastStudied, updatedAt: $0.updatedAt)
+        }
+        dto.events = all(UnderstandingEvent.self, context).map {
+            BackupFile.EventLogDTO(uid: $0.uid, topic: $0.topicUID, level: $0.level, date: $0.date, source: $0.source)
+        }
+        dto.plans = all(ExamPlan.self, context).map {
+            BackupFile.PlanDTO(uid: $0.uid, exam: $0.examUID, topics: $0.topicUIDs, dailyMinutes: $0.dailyMinutes,
+                               weekdays: $0.studyWeekdays, generatedAt: $0.generatedAt, createdAt: $0.createdAt)
+        }
+        dto.sessions = all(StudySession.self, context).map {
+            BackupFile.SessionDTO(uid: $0.uid, exam: $0.examUID, topic: $0.topicUID, subject: $0.subjectUID, kind: $0.kindRaw,
+                                  status: $0.statusRaw, date: $0.date, plannedMinutes: $0.plannedMinutes,
+                                  actualMinutes: $0.actualMinutes, completedAt: $0.completedAt, isPlanned: $0.isPlanned, note: $0.note)
+        }
+        dto.cards = all(Flashcard.self, context).map {
+            BackupFile.CardDTO(uid: $0.uid, subject: $0.subjectUID, topic: $0.topicUID, note: $0.noteUID, front: $0.front,
+                               back: $0.back, createdAt: $0.createdAt, ease: $0.ease, intervalDays: $0.intervalDays,
+                               repetitions: $0.repetitions, lapses: $0.lapses, due: $0.due, lastReviewed: $0.lastReviewed)
+        }
+        dto.results = all(PracticeResult.self, context).map {
+            BackupFile.ResultDTO(uid: $0.uid, topic: $0.topicUID, exam: $0.examUID, subject: $0.subjectUID,
+                                 score: $0.score, date: $0.date, kind: $0.kind)
+        }
+        dto.grades = all(Grade.self, context).map {
+            BackupFile.GradeDTO(uid: $0.uid, subject: $0.subjectUID, exam: $0.examUID, title: $0.title, value: $0.value,
+                                kind: $0.kindRaw, weight: $0.weight, date: $0.date)
+        }
+        dto.gradeSetups = all(GradeSetup.self, context).map {
+            BackupFile.GradeSetupDTO(uid: $0.uid, subject: $0.subjectUID, writtenShare: $0.writtenShare, goal: $0.goal)
+        }
+        dto.images = all(NoteImage.self, context).compactMap { image in
+            guard let data = try? Data(contentsOf: AttachmentStore.directory.appendingPathComponent(image.storedName)) else {
+                return nil as BackupFile.NoteImageDTO?
+            }
+            return BackupFile.NoteImageDTO(uid: image.uid, note: image.noteUID, caption: image.caption,
+                                           heightLines: image.heightLines, createdAt: image.createdAt, data: data)
+        }
+        return dto
+    }
+
+    static func restoreLearning(_ dto: BackupFile.LearningDTO, context: ModelContext) throws {
+        for item in dto.progress {
+            let entry = TopicProgress(topicUID: item.topic ?? UUID())
+            entry.uid = item.uid
+            entry.topicUID = item.topic
+            entry.understandingRaw = item.understanding
+            entry.completion = item.completion
+            entry.importance = item.importance
+            entry.estimatedMinutes = item.estimatedMinutes
+            entry.lastStudied = item.lastStudied
+            entry.updatedAt = item.updatedAt
+            context.insert(entry)
+        }
+        for item in dto.events {
+            let event = UnderstandingEvent(topicUID: item.topic ?? UUID(), level: item.level, source: item.source)
+            event.uid = item.uid
+            event.topicUID = item.topic
+            event.date = item.date
+            context.insert(event)
+        }
+        for item in dto.plans {
+            let plan = ExamPlan(examUID: item.exam ?? UUID())
+            plan.uid = item.uid
+            plan.examUID = item.exam
+            plan.topicUIDs = item.topics
+            plan.dailyMinutes = item.dailyMinutes
+            plan.studyWeekdays = item.weekdays
+            plan.generatedAt = item.generatedAt
+            plan.createdAt = item.createdAt
+            context.insert(plan)
+        }
+        for item in dto.sessions {
+            let session = StudySession(date: item.date, minutes: item.plannedMinutes, kind: SessionKind(rawValue: item.kind) ?? .free)
+            session.uid = item.uid
+            session.examUID = item.exam
+            session.topicUID = item.topic
+            session.subjectUID = item.subject
+            session.statusRaw = item.status
+            session.actualMinutes = item.actualMinutes
+            session.completedAt = item.completedAt
+            session.isPlanned = item.isPlanned
+            session.note = item.note
+            context.insert(session)
+        }
+        for item in dto.cards {
+            let card = Flashcard(front: item.front, back: item.back)
+            card.uid = item.uid
+            card.subjectUID = item.subject
+            card.topicUID = item.topic
+            card.noteUID = item.note
+            card.createdAt = item.createdAt
+            card.ease = item.ease
+            card.intervalDays = item.intervalDays
+            card.repetitions = item.repetitions
+            card.lapses = item.lapses
+            card.due = item.due
+            card.lastReviewed = item.lastReviewed
+            context.insert(card)
+        }
+        for item in dto.results {
+            let result = PracticeResult(score: item.score, kind: item.kind)
+            result.uid = item.uid
+            result.topicUID = item.topic
+            result.examUID = item.exam
+            result.subjectUID = item.subject
+            result.date = item.date
+            context.insert(result)
+        }
+        for item in dto.grades {
+            let grade = Grade(subjectUID: item.subject, value: item.value, kind: GradeKind(rawValue: item.kind) ?? .other)
+            grade.uid = item.uid
+            grade.examUID = item.exam
+            grade.title = item.title
+            grade.weight = item.weight
+            grade.date = item.date
+            context.insert(grade)
+        }
+        for item in dto.gradeSetups {
+            let setup = GradeSetup(subjectUID: item.subject ?? UUID())
+            setup.uid = item.uid
+            setup.subjectUID = item.subject
+            setup.writtenShare = item.writtenShare
+            setup.goal = item.goal
+            context.insert(setup)
+        }
+        for item in dto.images {
+            let stored = try AttachmentStore.store(item.data, fileName: "bild.jpg")
+            let image = NoteImage(noteUID: item.note ?? UUID(), storedName: stored.storedName)
+            image.uid = item.uid
+            image.noteUID = item.note
+            image.caption = item.caption
+            image.heightLines = item.heightLines
+            image.createdAt = item.createdAt
+            context.insert(image)
+        }
     }
 }
 

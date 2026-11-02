@@ -9,6 +9,7 @@ struct TopicDetailView: View {
     @State private var addingSubtopic = false
     @State private var newTitle = ""
     @State private var sheet: EditorSheet?
+    @State private var studySheet: NoteDocument?
 
     var body: some View {
         List {
@@ -23,6 +24,24 @@ struct TopicDetailView: View {
                     .font(.caption)
                     .foregroundStyle(Palette.secondaryInk)
                 }
+            }
+            .marginRow()
+
+            TopicProgressSection(topicUID: topic.uid)
+
+            Section {
+                Button {
+                    studySheet = StudySheet.create(for: [topic], title: topic.title, subject: topic.subject, context: context)
+                } label: {
+                    Label("Lernzettel erstellen", systemImage: "doc.richtext")
+                }
+                NavigationLink {
+                    FlashcardDeckView(scope: .topic(topic.uid), title: topic.title)
+                } label: {
+                    Label("Karteikarten zu diesem Thema", systemImage: "rectangle.on.rectangle.angled")
+                }
+            } footer: {
+                Text("Der Lernzettel sammelt Notizen, Unterthemen und Karteikarten dieses Themas – in deiner Handschrift, zum Ausdrucken.")
             }
             .marginRow()
 
@@ -81,6 +100,9 @@ struct TopicDetailView: View {
         .navigationTitle("Thema")
         .navigationBarTitleDisplayMode(.inline)
         .editorSheet($sheet)
+        .navigationDestination(item: $studySheet) { note in
+            NoteEditorView(document: note)
+        }
         .alert("Neues Unterthema", isPresented: $addingSubtopic) {
             TextField("Titel", text: $newTitle)
             Button("Hinzufügen", action: addSubtopic)

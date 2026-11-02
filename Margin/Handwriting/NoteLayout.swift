@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import ImageIO
 
 /// Paper and pen settings, in PDF points (1 pt = 1/72 inch).
 struct PageSettings: Equatable, Sendable {
@@ -58,6 +59,15 @@ struct NoteContent: Equatable, Sendable {
     var header: String
     var body: String
     var seed: UInt64
+    /// Pictures referenced by `[[Bild:<uid>]]` lines.
+    var images: [UUID: NoteImageRef] = [:]
+}
+
+/// Where a note picture's file is and how big it should be.
+struct NoteImageRef: Equatable, Sendable {
+    let url: URL
+    let heightLines: Int
+    let caption: String
 }
 
 /// A structural line of the note source.
@@ -66,7 +76,12 @@ enum NoteBlock: Equatable {
     case subheading(String)
     case bullet(String)
     case paragraph(String)
+    case image(UUID)
     case blank
+
+    static let imagePrefix = "[[Bild:"
+
+    static func imageLine(_ id: UUID) -> String { "\(imagePrefix)\(id.uuidString)]]" }
 
     /// "# " heading, "## " subheading, "- " / "• " / "* " list item, empty line = blank.
     static func parse(_ text: String) -> [NoteBlock] {
@@ -75,6 +90,10 @@ enum NoteBlock: Equatable {
             .map { raw in
                 let line = raw.trimmingCharacters(in: .whitespaces)
                 if line.isEmpty { return .blank }
+                if line.hasPrefix(imagePrefix), line.hasSuffix("]]"),
+                   let id = UUID(uuidString: String(line.dropFirst(imagePrefix.count).dropLast(2))) {
+                    return .image(id)
+                }
                 if line.hasPrefix("## ") { return .subheading(String(line.dropFirst(3))) }
                 if line.hasPrefix("# ") { return .heading(String(line.dropFirst(2))) }
                 for marker in ["- ", "• ", "* ", "– "] where line.hasPrefix(marker) {
@@ -98,6 +117,32 @@ struct LaidOutPage: @unchecked Sendable {
     /// All handwriting on the page as one filled path.
     let ink: CGPath
     let fallbacks: [FallbackText]
+    var images: [PlacedImage] = []
+}
+
+/// A picture glued onto a page (slightly turned, like a real photo in an exercise book).
+struct PlacedImage: @unchecked Sendable {
+    let image: CGImage
+    let rect: CGRect
+    let rotation: CGFloat
+}
+
+/// Loads note pictures, downsized for drawing, and keeps them cached.
+enum NoteImageLoader {
+    private static let cache = NSCache<NSURL, CGImage>()
+
+    static func image(at url: URL, maxPixels: Int = 1600) -> CGImage? {
+        if let cached = cache.object(forKey: url as NSURL) { return cached }
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixels,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        cache.setObject(image, forKey: url as NSURL)
+        return image
+    }
 }
 
 /// Lays text out on pages in the user's handwriting.
@@ -108,6 +153,7 @@ struct LaidOutPage: @unchecked Sendable {
 enum NoteLayout {
     static func layout(_ content: NoteContent, settings: PageSettings, font: HandwritingFont) -> [LaidOutPage] {
         let writer = PageWriter(settings: settings, font: font, seed: content.seed)
+        writer.images = content.images
 
         if settings.showHeader && !content.header.isEmpty {
             writer.writeRightAligned(writer.normalize(content.header), scale: 0.8)
@@ -135,6 +181,8 @@ enum NoteLayout {
                 writer.writeParagraph(text, scale: 1, underline: false, bullet: true)
             case .paragraph(let text):
                 writer.writeParagraph(text, scale: 1, underline: false)
+            case .image(let id):
+                writer.placeImage(id)
             }
             previous = block
         }
@@ -151,6 +199,8 @@ private final class PageWriter {
     private var pages: [LaidOutPage] = []
     private var ink = CGMutablePath()
     private var fallbacks: [FallbackText] = []
+    private var placedImages: [PlacedImage] = []
+    var images: [UUID: NoteImageRef] = [:]
     private var line = 0
     private var occurrences: [String: Int] = [:]
     private var lineDrift: (amplitude: CGFloat, frequency: CGFloat, phase: CGFloat, slope: CGFloat, start: CGFloat)?
@@ -203,13 +253,39 @@ private final class PageWriter {
             var rng = SeededRandom(seed: StableHash.combine(seed, 77, UInt64(number)))
             write(text, at: (settings.pageSize.width - width) / 2, baseline: baselineY, scale: 0.8, rng: &rng, drift: false)
         }
-        pages.append(LaidOutPage(number: number, ink: ink.copy() ?? ink, fallbacks: fallbacks))
+        pages.append(LaidOutPage(number: number, ink: ink.copy() ?? ink, fallbacks: fallbacks, images: placedImages))
         ink = CGMutablePath()
         fallbacks = []
+        placedImages = []
+    }
+
+    /// Glues a picture onto the page, a few lines high, then continues below it.
+    func placeImage(_ id: UUID) {
+        guard let ref = images[id], let image = NoteImageLoader.image(at: ref.url) else { return }
+        let spacing = settings.lineSpacing
+        var height = CGFloat(max(3, ref.heightLines)) * spacing - spacing * 0.4
+        let aspect = CGFloat(image.width) / CGFloat(max(image.height, 1))
+        var width = height * aspect
+        if width > settings.contentWidth * 0.95 {
+            width = settings.contentWidth * 0.95
+            height = width / aspect
+        }
+        let linesNeeded = Int((height / spacing).rounded(.up)) + 1
+        if line + linesNeeded > settings.linesPerPage && line > 0 { newPage() }
+
+        var rng = SeededRandom(seed: StableHash.combine(seed, 909, StableHash.of(id.uuidString)))
+        let top = settings.marginTop + CGFloat(line) * spacing + spacing * 0.35
+        let left = leftEdge + (settings.contentWidth - width) * (0.1 + 0.3 * rng.unit())
+        placedImages.append(PlacedImage(image: image, rect: CGRect(x: left, y: top, width: width, height: height),
+                                        rotation: 0.025 * rng.signed()))
+        for _ in 0..<linesNeeded { nextLine() }
+        if !ref.caption.isEmpty {
+            writeParagraph(normalize(ref.caption), scale: 0.85, underline: false)
+        }
     }
 
     func finish() -> [LaidOutPage] {
-        if line > 0 || !ink.isEmpty || !fallbacks.isEmpty || pages.isEmpty {
+        if line > 0 || !ink.isEmpty || !fallbacks.isEmpty || !placedImages.isEmpty || pages.isEmpty {
             closePage()
         }
         return pages

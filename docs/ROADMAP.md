@@ -103,7 +103,17 @@ A–Z, a–z, 0–9, Ä Ö Ü ä ö ü ß, punctuation including German quotes �
 - PDF export: vector PDF via `UIGraphicsPDFRenderer`, saved to Files or shared.
 - Text import: paste, type, or import a PDF (text PDFs via PDFKit; scanned PDFs via Vision OCR with German support).
 
-## Phase 3: exam planner
+## Phase 3: learning (built, testing)
+
+Built: exam topics with a 5-level understanding tracker (separate from "material done"), learning-plan generator (weak/important first, learn → practise → review with spacing, daily limit respected, load of other exams counted, final review and practice test, missed-session rescheduling), focus timer, flashcards with SM-2 spaced repetition shown on index cards in the user's handwriting, `Begriff :: Erklärung` lines in notes become cards, readiness from understanding/practice/material/recency, "Nächster Schritt", weekly review and statistics (no streaks), grades with weighting and "needed next grade", images glued into handwritten notes, Lernzettel generator. Planner + tasks share one tab. Database version 3, backup format 3.
+
+## Phase 4: Claude (built, testing)
+
+Built: in-app assistant (Claude Opus 5.5 by default, Sonnet/Haiku selectable; user's own API key in the Keychain; explicit consent screen; photos, PDFs, text files and Margin notes as material; grounded system prompt; refusal fallbacks), a shared set of Margin tools (read overview/tasks/exams/topics/notes/cards/stats; create tasks, exams, topics, flashcards, handwritten notes; record understanding and quiz results; build learning plans) with an approval card before every change, and an MCP server inside the app (Streamable HTTP, token-protected, read-only unless allowed) for Claude Code / Claude Desktop on the PC.
+
+Honest limits: the assistant needs internet and an API key with credit; the MCP server only runs while Margin is open on the same Wi-Fi; Claude Desktop needs Node.js for the `mcp-remote` bridge.
+
+## Original Phase 3 notes: exam planner
 
 - `Exam` with date, subject and topics. Each topic has description, priority, estimated time, **understanding** (5 levels, separate from **completion %**), last studied, and notes/materials.
 - **Roadmap generator** (pure Swift, unit-tested):
@@ -114,7 +124,7 @@ A–Z, a–z, 0–9, Ä Ö Ü ä ö ü ß, punctuation including German quotes �
 - **Readiness** combines understanding, practice/quiz results, coverage of all topics and how long ago you studied (knowledge fades). It's not just "tasks ticked off". The app shows *why* (for example "Derivatives: notes done, but last quiz 40 %").
 - Study sessions appear in the calendar and can be moved.
 
-## Phase 4: AI learning assistant
+## Original Phase 4 notes: AI learning assistant
 
 - Input: pasted text, PDFs, photos of worksheets (OCR on device first), and your notes.
 - Features: explain simply, key terms, summaries, flashcards, practice questions, mock tests, revision sheets, "turn into handwritten notes", answer evaluation, weak-topic recommendations feeding the understanding tracker.
@@ -130,4 +140,4 @@ Animations, haptics, transitions, rendering performance (glyph caching, backgrou
 
 ## Later
 
-iCloud sync (needs a paid Apple developer account), PC companion, advanced handwriting customisation, font export, more export formats.
+iCloud sync (needs a paid Apple developer account), widgets and a Live Activity for the focus timer (need an app extension + App Group – to be tested with a free Apple ID), joined-up handwriting via letter pairs, font export, more export formats.

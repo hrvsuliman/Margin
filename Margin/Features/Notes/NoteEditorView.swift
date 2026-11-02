@@ -15,6 +15,7 @@ struct NoteEditorView: View {
     @Bindable var document: NoteDocument
     @Query(sort: \SchoolSubject.sortIndex) private var subjects: [SchoolSubject]
     @Query(sort: \HandwritingProfile.createdAt) private var profiles: [HandwritingProfile]
+    @Query private var noteImages: [NoteImage]
 
     @State private var mode: Mode
     @StateObject private var textController = MarkupTextController()
@@ -28,6 +29,11 @@ struct NoteEditorView: View {
     @State private var importing = false
     @State private var errorMessage: String?
     @State private var export: ExportFile?
+    @State private var imageItem: PhotosPickerItem?
+    @State private var showImages = false
+    @State private var showAssistant = false
+
+    private var myImages: [NoteImage] { noteImages.filter { $0.noteUID == document.uid } }
 
     init(document: NoteDocument) {
         self.document = document
@@ -45,7 +51,7 @@ struct NoteEditorView: View {
 
     private var renderKey: RenderKey {
         RenderKey(
-            content: NoteRendering.content(for: document, subjects: subjects),
+            content: NoteRendering.content(for: document, subjects: subjects, images: noteImages),
             settings: PageSettings(document: document),
             profileUID: profile?.uid,
             profileRevision: profile?.updatedAt
@@ -87,6 +93,22 @@ struct NoteEditorView: View {
         .sheet(item: $export) { file in
             NavigationStack { ExportPreviewView(file: file) }
                 .tint(Palette.marginRed)
+        }
+        .sheet(isPresented: $showAssistant) {
+            AssistantView(initialAttachments: [AssistantAttachment(
+                title: document.title.isEmpty ? "Diese Notiz" : document.title, symbol: "doc.text",
+                block: ClaudeClient.text("Notiz „\(document.title)“ aus Margin (id \(document.uid.uuidString)):\n\n\(document.body)")
+            )])
+        }
+        .sheet(isPresented: $showImages) {
+            NavigationStack { NoteImagesView(document: document) }
+                .tint(Palette.marginRed)
+                .presentationDetents([.medium, .large])
+        }
+        .onChange(of: imageItem) {
+            guard let item = imageItem else { return }
+            imageItem = nil
+            Task { await insertImage(item) }
         }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: TextImport.supportedTypes) { result in
             if case .success(let url) = result {
@@ -260,7 +282,17 @@ struct NoteEditorView: View {
                     Label("PDF, Text oder Bild", systemImage: "doc")
                 }
                 PhotosPicker(selection: $photoItem, matching: .images) {
-                    Label("Foto (Text erkennen)", systemImage: "text.viewfinder")
+                    Label("Tafelbild abschreiben (Text erkennen)", systemImage: "text.viewfinder")
+                }
+                PhotosPicker(selection: $imageItem, matching: .images) {
+                    Label("Bild einkleben", systemImage: "photo.badge.plus")
+                }
+                if !myImages.isEmpty {
+                    Button {
+                        showImages = true
+                    } label: {
+                        Label("Bilder (\(myImages.count))", systemImage: "photo.on.rectangle")
+                    }
                 }
                 Button {
                     if let pasted = UIPasteboard.general.string, !pasted.isEmpty {
@@ -274,6 +306,13 @@ struct NoteEditorView: View {
                 Image(systemName: "square.and.arrow.down")
             }
             .accessibilityLabel("Text importieren")
+
+            Button {
+                showAssistant = true
+            } label: {
+                Image(systemName: "sparkles")
+            }
+            .accessibilityLabel("Claude zu dieser Notiz fragen")
 
             Button {
                 showDetails = true
@@ -315,6 +354,25 @@ struct NoteEditorView: View {
         }
     }
 
+    /// Stores the picture and adds a `[[Bild:…]]` line where it should appear.
+    private func insertImage(_ item: PhotosPickerItem) async {
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self), let image = UIImage(data: data) else {
+                throw TextImportError.noText
+            }
+            let jpeg = image.jpegData(compressionQuality: 0.85) ?? data
+            let stored = try AttachmentStore.store(jpeg, fileName: "bild.jpg")
+            let noteImage = NoteImage(noteUID: document.uid, storedName: stored.storedName)
+            context.insert(noteImage)
+            appendToBody(NoteBlock.imageLine(noteImage.uid))
+            try? context.save()
+            mode = .pages
+            Haptics.success()
+        } catch {
+            errorMessage = "Das Bild konnte nicht eingefügt werden."
+        }
+    }
+
     private func appendToBody(_ text: String) {
         let separator = document.body.isEmpty ? "" : (document.body.hasSuffix("\n") ? "\n" : "\n\n")
         document.body += separator + text
@@ -338,6 +396,7 @@ struct NoteEditorView: View {
     }
 
     private func saveThumbnail() {
+        LearningStore.syncCards(for: document, context: context)
         if let first = pages.first {
             document.thumbnail = PageRenderer.thumbnail(of: first, settings: renderedSettings, width: 120)
                 .jpegData(compressionQuality: 0.75)
