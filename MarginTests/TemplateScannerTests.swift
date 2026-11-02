@@ -39,7 +39,10 @@ final class TemplateScannerTests: XCTestCase {
             pixels[5 * size + x] = 210
             pixels[12 * size + x] = 90
         }
-        for y in 2..<18 { pixels[y * size + 10] = 40 }
+        for y in 2..<18 {
+            pixels[y * size + 10] = 40
+            pixels[y * size + 11] = 40
+        }
         let mask = try XCTUnwrap(TemplateScanner.inkMask(pixels, width: size, height: size))
         XCTAssertEqual(mask[5 * size + 3], 255, "light guide counted as ink")
         XCTAssertEqual(mask[12 * size + 3], 255, "printed line not removed")
