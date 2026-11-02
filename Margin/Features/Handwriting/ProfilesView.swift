@@ -31,6 +31,7 @@ struct ProfilesView: View {
     @State private var opened: HandwritingProfile?
     @State private var capture: CaptureSession?
     @State private var pendingDelete: HandwritingProfile?
+    @State private var penScan: HandwritingProfile?
 
     var body: some View {
         List {
@@ -39,9 +40,9 @@ struct ProfilesView: View {
                     EmptyStateView(
                         symbol: "signature",
                         title: "Deine Handschrift",
-                        message: "Schreib Buchstaben, Ziffern und Satzzeichen einmal mit dem Finger. Margin setzt daraus Texte in deiner Schrift. Das dauert etwa 10 Minuten und bleibt auf diesem iPhone.",
+                        message: "Du füllst eine Vorlage mit deinem eigenen Stift aus und scannst sie. Margin setzt daraus Texte in deiner Schrift. Alles bleibt auf diesem iPhone.",
                         actionTitle: "Jetzt einrichten",
-                        action: { createProfile(startCapture: true) }
+                        action: { createProfile(startScan: true) }
                     )
                 }
                 .listRowBackground(Color.clear)
@@ -69,7 +70,7 @@ struct ProfilesView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    createProfile(startCapture: true)
+                    createProfile(startScan: true)
                 } label: {
                     Image(systemName: "plus")
                 }
@@ -81,6 +82,10 @@ struct ProfilesView: View {
         }
         .fullScreenCover(item: $capture) { session in
             CaptureFlowView(profile: session.profile, items: session.items, title: session.title)
+        }
+        .sheet(item: $penScan) { profile in
+            NavigationStack { PenScanView(profile: profile) }
+                .tint(Palette.marginRed)
         }
         .confirmationDialog("Handschrift löschen?", isPresented: Binding(
             get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }
@@ -94,14 +99,14 @@ struct ProfilesView: View {
         }
     }
 
-    private func createProfile(startCapture: Bool) {
+    private func createProfile(startScan: Bool) {
         let profile = HandwritingProfile(name: profiles.isEmpty ? "Meine Handschrift" : "Handschrift \(profiles.count + 1)")
         profile.isDefault = profiles.isEmpty
         context.insert(profile)
         context.commit()
         opened = profile
-        if startCapture {
-            capture = CaptureSession.missing(for: profile)
+        if startScan {
+            Deferred.afterDismiss { penScan = profile }
         }
     }
 }

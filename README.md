@@ -34,7 +34,8 @@ The app's interface is **German** (dates, Monday-first weeks, German school term
 
 Install over Phase 1 – your data is migrated to the new database version automatically. To be safe, **save a backup first** (Einstellungen › Backup sichern).
 
-1. **Handschrift einrichten:** tab *Notizen* › *Handschrift einrichten*. Write each character with your finger on the guide lines (solid line = baseline, dashed = top of small letters). At the end write the word "Handschrift" in one go – it measures your letter spacing. Takes ~10 minutes; you can stop with *Fertig* and continue later ("Fehlende Zeichen schreiben").
+1. **Handschrift einrichten (Stift & Papier, recommended):** tab *Notizen* › *Handschrift einrichten* › *Vorlage drucken* (2 A4 pages). Fill it in with your normal pen – one character per box on the solid line, small letters up to the dashed line, the word "Handschrift" in one go at the bottom of page 2. Then *Mit der Kamera scannen* (both pages). Check the cut-out characters on the review screen, untick anything wrong, *Übernehmen*. Tips: blue or black pen (no pencil), good light, no shadows, keep the four black corners visible. A scan PDF from a school scanner or a photo works too ("Schon gescannt?").
+   *Mit dem Finger* still exists for single missing characters – write big and slowly; the line is smoothed.
 2. **Vorschau & Analyse:** the profile shows the pangram in your handwriting, how much the size was corrected, your slant, how even your letters are and which ones stand out. Try *Größe automatisch angleichen* if it lists any.
 3. **Varianten:** *Varianten häufiger Buchstaben schreiben* (e, n, i, s, r …, two more each). Repeated letters then stop looking copied.
 4. **Einzelne Zeichen korrigieren:** tap a character in the grid – adjust size and height, delete a bad version, write another.
@@ -46,7 +47,7 @@ Install over Phase 1 – your data is migrated to the new database version autom
 10. **PDF:** *PDF* shows the preview; *Teilen oder sichern* saves it to the Files app or shares it. Check it prints at A4.
 11. **Bibliothek:** search, sort by subject / folder / exam, long-press to rename, duplicate, export or delete. Subject pages now list their notes too.
 
-Honest limits of this version: letters are placed one by one (no joined-up cursive yet); characters you haven't written appear in a visibly different fallback font; importing handwriting from a photo of a page is not in this phase (see the roadmap).
+Honest limits of this version: letters are placed one by one (no joined-up cursive yet); characters you haven't written appear in a visibly different fallback font; the template needs a printer (a school printer is fine); pen-on-paper characters keep their real thickness, so the *Stiftstärke* slider can only make them bolder, not thinner.
 
 ### Phase 1: what to check on your iPhone
 

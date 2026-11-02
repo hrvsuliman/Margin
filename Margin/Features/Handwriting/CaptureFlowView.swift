@@ -74,7 +74,7 @@ struct CaptureFlowView: View {
             .padding(.horizontal)
 
             VStack(spacing: 4) {
-                Text(isWord ? "Schreib dieses Wort in einem Zug:" : "Schreib:")
+                Text(isWord ? "Schreib dieses Wort in einem Zug:" : "Schreib groß und langsam:")
                     .font(.subheadline)
                     .foregroundStyle(Palette.secondaryInk)
                 Text(item.text)
@@ -94,8 +94,8 @@ struct CaptureFlowView: View {
                 .background(PaperInk.paper)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .overlay(RoundedRectangle(cornerRadius: 16).stroke(Palette.ruling, lineWidth: 1))
-                .aspectRatio(isWord ? 2.6 : 1.05, contentMode: .fit)
-                .padding(.horizontal, isWord ? 8 : 28)
+                .aspectRatio(isWord ? 2.4 : 0.92, contentMode: .fit)
+                .padding(.horizontal, isWord ? 6 : 14)
                 .id("canvas-\(item.id)")
 
             HStack(spacing: 12) {

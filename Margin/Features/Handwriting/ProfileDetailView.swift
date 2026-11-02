@@ -11,6 +11,7 @@ struct ProfileDetailView: View {
     @State private var font: HandwritingFont?
     @State private var capture: CaptureSession?
     @State private var confirmDelete = false
+    @State private var showPenScan = false
 
     private var analysis: HandwritingAnalysis? { font?.analysis }
 
@@ -26,11 +27,33 @@ struct ProfileDetailView: View {
             .marginRow()
 
             Section {
+                Button {
+                    showPenScan = true
+                } label: {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Mit Stift auf Papier").font(.body.weight(.semibold))
+                            Text("Vorlage drucken, ausfüllen, scannen – empfohlen")
+                                .font(.caption)
+                                .foregroundStyle(Palette.secondaryInk)
+                        }
+                    } icon: {
+                        Image(systemName: "doc.viewfinder")
+                    }
+                }
+            } header: {
+                Text("Schriftproben")
+            } footer: {
+                Text("Mit deinem echten Stift sieht das Ergebnis am natürlichsten aus. Einzelne Zeichen kannst du jederzeit auch mit dem Finger ergänzen.")
+            }
+            .marginRow()
+
+            Section {
                 if let missing = analysis?.missing, !missing.isEmpty {
                     Button {
                         capture = CaptureSession.missing(for: profile)
                     } label: {
-                        Label("Fehlende Zeichen schreiben (\(missing.count))", systemImage: "pencil.and.outline")
+                        Label("Fehlende Zeichen mit dem Finger (\(missing.count))", systemImage: "hand.draw")
                     }
                 } else if !profile.spacingMeasured {
                     Button {
@@ -43,8 +66,10 @@ struct ProfileDetailView: View {
                 Button {
                     capture = CaptureSession.variants(for: profile)
                 } label: {
-                    Label("Varianten häufiger Buchstaben schreiben", systemImage: "square.stack.3d.up")
+                    Label("Varianten mit dem Finger", systemImage: "square.stack.3d.up")
                 }
+            } header: {
+                Text("Mit dem Finger")
             } footer: {
                 Text("Mehrere Versionen eines Buchstabens sorgen dafür, dass Wiederholungen nicht wie kopiert aussehen.")
             }
@@ -95,6 +120,10 @@ struct ProfileDetailView: View {
         .loadsFont(of: profile, into: $font)
         .fullScreenCover(item: $capture) { session in
             CaptureFlowView(profile: session.profile, items: session.items, title: session.title)
+        }
+        .sheet(isPresented: $showPenScan) {
+            NavigationStack { PenScanView(profile: profile) }
+                .tint(Palette.marginRed)
         }
         .onChange(of: profile.name) { profile.touch() }
         .onDisappear { try? context.save() }
@@ -280,8 +309,9 @@ struct GlyphDetailView: View {
 
     private func variant(for sample: GlyphSample) -> HandwritingFont.Variant? {
         guard let font else { return nil }
-        let input = GlyphInput(uid: sample.uid, strokes: GlyphStrokes.decode(sample.strokeData),
-                               scale: sample.scale, baselineOffset: sample.baselineOffset)
+        let geometry = GlyphStrokes.decodeGlyph(sample.strokeData)
+        let input = GlyphInput(uid: sample.uid, strokes: geometry.strokes,
+                               scale: sample.scale, baselineOffset: sample.baselineOffset, outlines: geometry.outlines)
         return HandwritingFont.makeVariant(input, analysis: font.analysis, penRatio: font.penRatio)
     }
 

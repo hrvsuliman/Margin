@@ -17,12 +17,24 @@ struct CapturedPoint: Equatable {
     var time: TimeInterval
 }
 
-/// Compact binary storage for strokes (much smaller than JSON).
-/// Layout: version byte, UInt16 stroke count, then per stroke a UInt16
+/// Compact binary storage for glyph geometry (much smaller than JSON).
+/// Layout: version byte, UInt16 path count, then per path a UInt16
 /// point count followed by Float32 x, y, w for each point (little-endian).
+///
+/// Version 1: pen strokes written with a finger (centre lines with width).
+/// Version 2: filled outlines traced from a scanned pen sample (closed
+/// polygons, `w` unused; outer shapes and holes have opposite orientation).
 enum GlyphStrokes {
     static func encode(_ strokes: [Stroke]) -> Data {
-        var data = Data([1])
+        encode(strokes, version: 1)
+    }
+
+    static func encodeOutlines(_ polygons: [Stroke]) -> Data {
+        encode(polygons, version: 2)
+    }
+
+    private static func encode(_ strokes: [Stroke], version: UInt8) -> Data {
+        var data = Data([version])
         let kept = strokes.prefix(Int(UInt16.max))
         append(UInt16(kept.count), to: &data)
         for stroke in kept {
@@ -37,9 +49,23 @@ enum GlyphStrokes {
         return data
     }
 
+    /// Finger strokes only (empty for outline glyphs).
     static func decode(_ data: Data) -> [Stroke] {
+        data.first == 1 ? decodePaths(data) : []
+    }
+
+    /// Strokes and outlines, whichever the data contains.
+    static func decodeGlyph(_ data: Data) -> (strokes: [Stroke], outlines: [Stroke]) {
+        switch data.first {
+        case 1?: (decodePaths(data), [])
+        case 2?: ([], decodePaths(data))
+        default: ([], [])
+        }
+    }
+
+    private static func decodePaths(_ data: Data) -> [Stroke] {
         let bytes = [UInt8](data)
-        guard bytes.first == 1 else { return [] }
+        guard let version = bytes.first, version == 1 || version == 2 else { return [] }
         var index = 1
 
         func read16() -> UInt16? {
@@ -134,7 +160,9 @@ enum GlyphProcessing {
         let minX = strokes.flatMap { $0 }.map(\.location.x).min() ?? 0
         let unit = guide.xHeight
 
-        return strokes.map { stroke in
+        return strokes.map { raw in
+            // Steady the line: finger input is shakier than a pen.
+            let stroke = stabilize(raw)
             let widths = penWidths(for: stroke)
             let points = zip(stroke, widths).map { point, width in
                 StrokePoint(
@@ -145,6 +173,23 @@ enum GlyphProcessing {
             }
             return simplify(points, tolerance: 0.012)
         }
+    }
+
+    /// Moving average over the touch positions (ends stay fixed), which removes
+    /// the jitter of finger writing without rounding off real corners too much.
+    static func stabilize(_ stroke: [CapturedPoint], radius: Int = 2) -> [CapturedPoint] {
+        guard stroke.count > 2 * radius + 1 else { return stroke }
+        var result = stroke
+        for index in radius..<(stroke.count - radius) {
+            var x: CGFloat = 0, y: CGFloat = 0
+            for offset in -radius...radius {
+                x += stroke[index + offset].location.x
+                y += stroke[index + offset].location.y
+            }
+            let count = CGFloat(2 * radius + 1)
+            result[index].location = CGPoint(x: x / count, y: y / count)
+        }
+        return result
     }
 
     /// Width factors from writing speed, smoothed, with a slight taper at the ends.

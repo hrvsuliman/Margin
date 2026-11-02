@@ -57,7 +57,15 @@ One SwiftUI screen, placeholder icon, XcodeGen, GitHub Actions, unsigned `.ipa`,
 - Text import: text PDFs (PDFKit), scanned PDFs and photos (Vision OCR, German), TXT/Markdown/RTF.
 - Database version 2 with an automatic migration from Phase 1, backup format 2 (version 1 backups still restore).
 
-**Moved to a later step ("Phase 2b"):** importing handwriting samples from a photo of a printed template sheet, letter-pair ligatures for a joined look, and "AI summary into notes" (needs Phase 4).
+**Phase 2b – pen & paper (built after testing showed finger writing is too hard on an iPhone):**
+- Printable 2-page A4 template with corner markers, page-number code and light-grey guide lines.
+- Scan with Apple's document camera, or import a scan PDF / photo (photos are straightened with Vision's document detection).
+- The four corner markers give an exact projective mapping (homography) from template millimetres to the photo, so every box is cut out straight even from a tilted shot.
+- Per box: adaptive ink threshold (light printed lines stay out, darker ones are removed and pen strokes crossing them bridged), outlines traced with Vision's contour detection, holes kept, stored as vector outlines (glyph data format 2).
+- Review screen before saving; pen samples replace finger samples of the same character.
+- Finger capture kept as a fallback, now with a steadier line and a larger box.
+
+**Still later:** letter-pair ligatures for a joined look, and "AI summary into notes" (needs Phase 4).
 
 This is the hardest and most unusual part, so here's what is and isn't realistic.
 

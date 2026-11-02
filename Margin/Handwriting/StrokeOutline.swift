@@ -43,6 +43,32 @@ enum StrokeOutline {
         }
     }
 
+    /// One round of corner cutting on a closed polygon (keeps its orientation).
+    static func smoothClosed(_ points: [CGPoint]) -> [CGPoint] {
+        guard points.count > 3 else { return points }
+        var result: [CGPoint] = []
+        result.reserveCapacity(points.count * 2)
+        for index in points.indices {
+            let p = points[index]
+            let q = points[(index + 1) % points.count]
+            result.append(p * 0.75 + q * 0.25)
+            result.append(p * 0.25 + q * 0.75)
+        }
+        return result
+    }
+
+    /// Signed area (negative = same orientation as the stroke outlines).
+    static func signedArea(_ points: [CGPoint]) -> CGFloat {
+        guard points.count > 2 else { return 0 }
+        var area: CGFloat = 0
+        for index in points.indices {
+            let p = points[index]
+            let q = points[(index + 1) % points.count]
+            area += p.x * q.y - q.x * p.y
+        }
+        return area / 2
+    }
+
     /// A filled circle with the same orientation as the bands.
     static func addDot(center: CGPoint, radius: CGFloat, to path: CGMutablePath) {
         let steps = 14
