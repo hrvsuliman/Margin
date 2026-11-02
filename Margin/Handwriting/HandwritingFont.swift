@@ -58,12 +58,14 @@ final class HandwritingFont: @unchecked Sendable {
         let baseline = CGFloat(analysis.baselineCorrection)
         let offset = CGFloat(input.baselineOffset)
 
-        let strokes: [[CGPoint]] = input.strokes.map { stroke in
-            stroke.map { point in
+        func place(_ path: Stroke) -> [CGPoint] {
+            path.map { point in
                 CGPoint(x: CGFloat(point.x) * scale, y: (CGFloat(point.y) - baseline) * scale + offset)
             }
         }
-        let allX = strokes.flatMap { $0 }.map(\.x)
+        let strokes = input.strokes.map(place)
+        let outlines = input.outlines.map(place)
+        let allX = (strokes + outlines).flatMap { $0 }.map(\.x)
         guard let minX = allX.min(), let maxX = allX.max() else { return nil }
 
         let path = CGMutablePath()
@@ -71,6 +73,20 @@ final class HandwritingFont: @unchecked Sendable {
             let shifted = stroke.map { CGPoint(x: $0.x - minX, y: $0.y) }
             let widths = raw.map { CGFloat($0.w) * penRatio }
             StrokeOutline.add(points: shifted, widths: widths, to: path)
+        }
+
+        // Pen-on-paper outlines keep their real thickness; a heavier pen setting
+        // thickens them by tracing their edge.
+        let thickening = max(0, penRatio - 0.15) * 0.9
+        for polygon in outlines where polygon.count > 2 {
+            let shifted = StrokeOutline.smoothClosed(polygon.map { CGPoint(x: $0.x - minX, y: $0.y) })
+            path.move(to: shifted[0])
+            for point in shifted.dropFirst() { path.addLine(to: point) }
+            path.closeSubpath()
+            if thickening > 0.005 {
+                let ring = shifted + [shifted[0]]
+                StrokeOutline.add(points: ring, widths: Array(repeating: thickening, count: ring.count), to: path)
+            }
         }
         return Variant(outline: path.copy() ?? path, advance: max(maxX - minX, penRatio))
     }

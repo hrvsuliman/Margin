@@ -4,9 +4,15 @@ import Foundation
 /// One written sample, decoded and detached from the database (safe to use off the main thread).
 struct GlyphInput: Sendable, Equatable {
     var uid: UUID
+    /// Finger-written centre lines.
     var strokes: [Stroke]
     var scale: Double
     var baselineOffset: Double
+    /// Filled outlines traced from a pen sample on paper.
+    var outlines: [Stroke] = []
+
+    /// Bounds of all ink, strokes and outlines together.
+    var bounds: GlyphBounds? { GlyphBounds(strokes + outlines) }
 }
 
 /// Everything needed to build a `HandwritingFont`, as plain values.
@@ -23,10 +29,11 @@ struct FontSource: Sendable {
     init(profile: HandwritingProfile) {
         var glyphs: [String: [GlyphInput]] = [:]
         for sample in (profile.glyphs ?? []).sorted(by: { $0.createdAt < $1.createdAt }) {
-            let strokes = GlyphStrokes.decode(sample.strokeData)
-            guard !strokes.isEmpty else { continue }
+            let geometry = GlyphStrokes.decodeGlyph(sample.strokeData)
+            guard !geometry.strokes.isEmpty || !geometry.outlines.isEmpty else { continue }
             glyphs[sample.character, default: []].append(
-                GlyphInput(uid: sample.uid, strokes: strokes, scale: sample.scale, baselineOffset: sample.baselineOffset)
+                GlyphInput(uid: sample.uid, strokes: geometry.strokes, scale: sample.scale,
+                           baselineOffset: sample.baselineOffset, outlines: geometry.outlines)
             )
         }
         self.glyphs = glyphs
@@ -76,7 +83,7 @@ struct HandwritingAnalysis: Sendable {
         // Baseline: where the ink of baseline characters ends.
         let bottoms = glyphs.filter { HandwritingCharset.baselineCharacters.contains($0.key) }
             .flatMap { $0.value }
-            .compactMap { GlyphBounds($0.strokes)?.maxY }
+            .compactMap { $0.bounds?.maxY }
         if let bottom = median(bottoms.map { Double($0) }) {
             result.baselineCorrection = min(max(bottom, -0.5), 0.5)
         }
@@ -121,7 +128,7 @@ struct HandwritingAnalysis: Sendable {
         var entries: [TopEntry] = []
         for (character, inputs) in glyphs where characters.contains(character) {
             for input in inputs {
-                guard let bounds = GlyphBounds(input.strokes) else { continue }
+                guard let bounds = input.bounds else { continue }
                 let top = (baseline - Double(bounds.minY)) * input.scale
                 entries.append(TopEntry(character: character, uid: input.uid, top: top, scale: input.scale))
             }
@@ -134,7 +141,7 @@ struct HandwritingAnalysis: Sendable {
         var weighted = 0.0
         var totalLength = 0.0
         for input in glyphs.values.flatMap({ $0 }) {
-            for stroke in input.strokes where stroke.count > 1 {
+            for stroke in input.strokes + input.outlines where stroke.count > 1 {
                 for (a, b) in zip(stroke, stroke.dropFirst()) {
                     var dx = Double(b.x - a.x)
                     var dy = Double(b.y - a.y)
@@ -159,7 +166,7 @@ struct HandwritingAnalysis: Sendable {
         guard letters.count > 1 else { return nil }
         var glyphWidths = 0.0
         for letter in letters {
-            guard let input = glyphs[letter]?.first, let bounds = GlyphBounds(input.strokes) else { return nil }
+            guard let input = glyphs[letter]?.first, let bounds = input.bounds else { return nil }
             glyphWidths += Double(bounds.width) * input.scale
         }
         let wordWidth = Double(wordBounds.width)
