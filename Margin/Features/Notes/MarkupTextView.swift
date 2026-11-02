@@ -3,19 +3,24 @@ import UIKit
 
 /// The kind of a line in the note source.
 enum LineStyle: CaseIterable {
-    case heading, subheading, bullet, plain
+    case heading, subheading, bullet, checkbox, callout, plain
 
     var prefix: String {
         switch self {
         case .heading: "# "
         case .subheading: "## "
         case .bullet: "- "
+        case .checkbox: "- [ ] "
+        case .callout: "> "
         case .plain: ""
         }
     }
 
+    /// Longest markers first, so "- [ ] " is not mistaken for "- ".
+    static let markers = ["- [ ] ", "- [x] ", "- [X] ", "## ", "# ", "- ", "• ", "* ", "– ", "> "]
+
     static func strip(_ line: String) -> String {
-        for prefix in ["## ", "# ", "- ", "• ", "* ", "– "] where line.hasPrefix(prefix) {
+        for prefix in markers where line.hasPrefix(prefix) {
             return String(line.dropFirst(prefix.count))
         }
         return line
@@ -44,6 +49,27 @@ final class MarkupTextController: ObservableObject {
         replace(lineRange, with: replacement, in: textView)
         let caret = lineRange.location + (replacement as NSString).length - (endsWithNewline ? 1 : 0)
         textView.selectedRange = NSRange(location: max(0, caret), length: 0)
+        Haptics.selection()
+    }
+
+    /// Ticks or unticks the checkboxes on the selected lines ("- [ ] " ↔ "- [x] ").
+    func toggleCheckbox() {
+        guard let textView else { return }
+        let text = textView.text as NSString
+        let selection = textView.selectedRange
+        let lineRange = text.lineRange(for: selection)
+        let block = text.substring(with: lineRange)
+        let endsWithNewline = block.hasSuffix("\n")
+        var lines = block.components(separatedBy: "\n")
+        if endsWithNewline { lines.removeLast() }
+        let toggled = lines.map { line -> String in
+            if line.hasPrefix("- [ ] ") { return "- [x] " + line.dropFirst(6) }
+            if line.hasPrefix("- [x] ") || line.hasPrefix("- [X] ") { return "- [ ] " + line.dropFirst(6) }
+            return "- [ ] " + LineStyle.strip(line)
+        }
+        let replacement = toggled.joined(separator: "\n") + (endsWithNewline ? "\n" : "")
+        replace(lineRange, with: replacement, in: textView)
+        textView.selectedRange = NSRange(location: min(selection.location, (textView.text as NSString).length), length: 0)
         Haptics.selection()
     }
 
@@ -157,6 +183,7 @@ enum MarkupStyler {
 
     private static let headingFont = serif(.title2, weight: .semibold)
     private static let subheadingFont = serif(.headline, weight: .semibold)
+    private static let linkRegex = try? NSRegularExpression(pattern: #"\[\[(?!Bild:)[^\[\]]+\]\]"#)
 
     static func style(_ view: UITextView) {
         let storage = view.textStorage
@@ -173,8 +200,21 @@ enum MarkupStyler {
             } else if line.hasPrefix("# ") {
                 markerLength = 2
                 font = headingFont
+            } else if line.hasPrefix("- [ ] ") || line.hasPrefix("- [x] ") || line.hasPrefix("- [X] ") {
+                markerLength = 6
+                if line.hasPrefix("- [ ] ") == false {
+                    storage.addAttribute(.foregroundColor, value: UIColor.secondaryLabel, range: range)
+                    storage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+                }
             } else if line.hasPrefix("- ") || line.hasPrefix("• ") || line.hasPrefix("* ") {
                 markerLength = 2
+            } else if line.hasPrefix("> ") {
+                markerLength = 2
+                font = serif(.body, weight: .regular)
+                storage.addAttribute(.backgroundColor, value: UIColor.secondarySystemFill, range: range)
+            } else if line.hasPrefix("|") || line == "---" {
+                font = .monospacedSystemFont(ofSize: bodyFont.pointSize * 0.9, weight: .regular)
+                storage.addAttribute(.foregroundColor, value: UIColor.secondaryLabel, range: range)
             } else if line.hasPrefix(NoteBlock.imagePrefix) {
                 markerLength = range.length
                 font = UIFont.preferredFont(forTextStyle: .caption1)
@@ -185,6 +225,12 @@ enum MarkupStyler {
             if markerLength > 0 {
                 storage.addAttribute(.foregroundColor, value: UIColor.tertiaryLabel,
                                      range: NSRange(location: range.location, length: min(markerLength, range.length)))
+            }
+        }
+        // [[Links]] to other notes in the margin red.
+        if let regex = linkRegex {
+            for match in regex.matches(in: storage.string, range: NSRange(location: 0, length: text.length)) {
+                storage.addAttribute(.foregroundColor, value: UIColor(Palette.marginRed), range: match.range)
             }
         }
         storage.endEditing()

@@ -9,8 +9,9 @@ struct BackupFile: Codable {
     static let formatName = "margin-backup"
 
     var format: String = BackupFile.formatName
-    /// 1 = Phase 1, 2 = adds handwriting and notes, 3 = learning, grades, note images.
-    var version: Int = 3
+    /// 1 = Phase 1, 2 = adds handwriting and notes, 3 = learning, grades, note images,
+    /// 4 = note pages/pins and lesson recordings.
+    var version: Int = 4
     var exportedAt: Date = .now
     var appVersion: String = ""
     var settings: SettingsSnapshot?
@@ -29,6 +30,8 @@ struct BackupFile: Codable {
     var notes: [NoteDTO]?
     var learning: LearningDTO?
     var chats: [ChatDTO]?
+    var noteMeta: [NoteMetaDTO]?
+    var recordings: [RecordingDTO]?
 
     struct SubjectDTO: Codable {
         var uid: UUID; var name: String; var colorKey: String; var teacher: String; var room: String
@@ -122,6 +125,13 @@ struct BackupFile: Codable {
     struct ChatDTO: Codable {
         var uid: UUID; var title: String; var engine: String; var createdAt: Date; var updatedAt: Date
         var items: Data; var messages: Data
+    }
+
+    struct NoteMetaDTO: Codable {
+        var uid: UUID; var note: UUID?; var parent: UUID?; var pinned: Bool; var template: String
+    }
+    struct RecordingDTO: Codable {
+        var uid: UUID; var note: UUID?; var duration: Double; var createdAt: Date; var data: Data
     }
 
     struct NoteDTO: Codable {
@@ -229,6 +239,16 @@ enum BackupService {
             BackupFile.ChatDTO(uid: $0.uid, title: $0.title, engine: $0.engineRaw, createdAt: $0.createdAt,
                                updatedAt: $0.updatedAt, items: $0.itemsData, messages: $0.messagesData)
         }
+        file.noteMeta = all(NoteMeta.self, context).map {
+            BackupFile.NoteMetaDTO(uid: $0.uid, note: $0.noteUID, parent: $0.parentUID, pinned: $0.pinned, template: $0.template)
+        }
+        file.recordings = all(NoteAudio.self, context).compactMap { audio in
+            guard let data = try? Data(contentsOf: AttachmentStore.directory.appendingPathComponent(audio.storedName)) else {
+                return nil as BackupFile.RecordingDTO?
+            }
+            return BackupFile.RecordingDTO(uid: audio.uid, note: audio.noteUID, duration: audio.duration,
+                                           createdAt: audio.createdAt, data: data)
+        }
         file.notes = all(NoteDocument.self, context).map { note in
             BackupFile.NoteDTO(
                 uid: note.uid, title: note.title, body: note.body, folder: note.folder, noteDate: note.noteDate,
@@ -252,7 +272,7 @@ enum BackupService {
               file.format == BackupFile.formatName else {
             throw BackupError.notABackup
         }
-        guard file.version <= 3 else { throw BackupError.newerVersion }
+        guard file.version <= 4 else { throw BackupError.newerVersion }
         return file
     }
 
@@ -435,6 +455,23 @@ enum BackupService {
             thread.messagesData = dto.messages
             context.insert(thread)
         }
+        for dto in file.noteMeta ?? [] {
+            let meta = NoteMeta(noteUID: dto.note ?? UUID())
+            meta.uid = dto.uid
+            meta.noteUID = dto.note
+            meta.parentUID = dto.parent
+            meta.pinned = dto.pinned
+            meta.template = dto.template
+            context.insert(meta)
+        }
+        for dto in file.recordings ?? [] {
+            let stored = try AttachmentStore.store(dto.data, fileName: "aufnahme.m4a")
+            let audio = NoteAudio(noteUID: dto.note ?? UUID(), storedName: stored.storedName, duration: dto.duration)
+            audio.uid = dto.uid
+            audio.noteUID = dto.note
+            audio.createdAt = dto.createdAt
+            context.insert(audio)
+        }
 
         if let settings, let snapshot = file.settings {
             snapshot.apply(to: settings)
@@ -466,6 +503,9 @@ enum BackupService {
         all(GradeSetup.self, context).forEach { context.delete($0) }
         all(NoteImage.self, context).forEach { context.delete($0) }
         all(ChatThread.self, context).forEach { context.delete($0) }
+        all(NoteMeta.self, context).forEach { context.delete($0) }
+        all(NoteAudio.self, context).forEach { context.delete($0) }
+        all(TimetableEntry.self, context).forEach { context.delete($0) }
         try? context.save()
         AttachmentStore.removeAllFiles()
     }

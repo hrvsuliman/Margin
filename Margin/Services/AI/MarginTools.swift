@@ -66,7 +66,7 @@ enum MarginTools {
                  schema: object(["query": string("Search text, optional"), "subject": string("Subject name, optional")]),
                  readOnly: true, label: "Notizen suchen"),
         ToolSpec(name: "read_note",
-                 description: "Full text of one note. Markup: '# ' heading, '## ' subheading, '- ' list, 'Begriff :: Erklärung' becomes a flashcard.",
+                 description: "Full text of one note. Markup: '# ' heading, '## ' subheading, '- ' list, '- [ ] ' checkbox, '> ' callout, '| a | b |' table, '[[Title]]' link to another note, 'Begriff :: Erklärung' becomes a flashcard.",
                  schema: object(["id": string("Note id from list_notes")], required: ["id"]), readOnly: true, label: "Notiz lesen"),
         ToolSpec(name: "list_flashcards",
                  description: "Flashcards, optionally only those due for review or of one subject.",
@@ -126,7 +126,7 @@ enum MarginTools {
                     "cards": ["type": "array", "items": object(["front": string, "back": string], required: ["front", "back"])],
                  ], required: ["cards"]), readOnly: false, label: "Karteikarten anlegen"),
         ToolSpec(name: "create_note",
-                 description: "Create a note; Margin shows it in the user's own handwriting. Use the markup: '# ' heading, '## ' subheading, '- ' list items, short paragraphs. Lines 'Begriff :: Erklärung' also become flashcards.",
+                 description: "Create a note; Margin shows it in the user's own handwriting. Use the markup: '# ' heading, '## ' subheading, '- ' list items, '- [ ] ' checkbox, '> ' callout box, small '| a | b |' tables, '[[Title]]' link to another note, short paragraphs. Lines 'Begriff :: Erklärung' also become flashcards.",
                  schema: object([
                     "title": string,
                     "body": string("Note text with markup"),

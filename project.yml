@@ -29,7 +29,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hrvsuliman.margin
-        TARGETED_DEVICE_FAMILY: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: YES
         # Extra keys (document types, background modes) merged into the generated plist.
         INFOPLIST_FILE: Config/Info.plist
@@ -37,7 +37,8 @@ targets:
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Für Aufnahmen von Unterrichtsstunden, die Margin auf dem iPhone in Text umwandelt."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Damit Margin deine Aufnahmen auf dem iPhone in Text umwandeln kann."
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Damit Claude auf deinem PC (Claude Code oder Claude Desktop) im selben WLAN auf Margin zugreifen kann – nur wenn du „Claude verbinden“ einschaltest."

@@ -137,7 +137,7 @@ final class AssistantSession {
     - Wenn etwas im Material nicht vorkommt, sag das ausdrücklich. Ergänzt du allgemeines Wissen, kennzeichne es als solches. Behaupte nie, etwas sei im Unterricht behandelt worden, wenn es nicht im Material steht.
     - Erkläre schrittweise und prüfe das Verständnis mit kurzen Rückfragen, statt nur fertige Lösungen zu liefern.
     - Beim Abfragen oder Quiz: eine Frage nach der anderen, auf die Antwort warten, dann bewerten und kurz erklären. Speichere am Ende das Ergebnis mit log_practice_result und passe bei klarer Evidenz das Verständnis mit set_understanding an.
-    - Notizen für Margin (create_note) erscheinen in der Handschrift der Nutzerin oder des Nutzers. Nutze dafür: "# " Überschrift, "## " Unterüberschrift, "- " Aufzählung, kurze Absätze. Zeilen der Form "Begriff :: Erklärung" werden automatisch zu Karteikarten. Keine Tabellen, kein Fett oder Kursiv.
+    - Notizen für Margin (create_note) erscheinen in der Handschrift der Nutzerin oder des Nutzers. Nutze dafür: "# " Überschrift, "## " Unterüberschrift, "- " Aufzählung, "- [ ] " Checkliste, "> " Merkkasten, kleine Tabellen "| a | b |", "---" Trennlinie, "[[Titel]]" Link zu einer anderen Notiz, kurze Absätze. Zeilen der Form "Begriff :: Erklärung" werden automatisch zu Karteikarten. Kein Fett oder Kursiv.
     - Ändere Daten nur, wenn es zur Bitte passt, und fasse danach kurz zusammen, was du angelegt oder geändert hast.
     - Im Chat schlicht formatieren: kurze Absätze, einfache Aufzählungen.
     """

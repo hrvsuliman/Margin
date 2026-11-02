@@ -44,6 +44,10 @@ struct NoteEditorView: View {
     @State private var classmateShare: URL?
 
     private var myImages: [NoteImage] { noteImages.filter { $0.noteUID == document.uid } }
+    @Query(sort: \NoteDocument.updatedAt, order: .reverse) private var allNotes: [NoteDocument]
+    private var linkTargets: [NoteDocument] {
+        Array(allNotes.filter { $0.uid != document.uid && !$0.title.trimmingCharacters(in: .whitespaces).isEmpty }.prefix(20))
+    }
 
     init(document: NoteDocument) {
         self.document = document
@@ -199,6 +203,7 @@ struct NoteEditorView: View {
                 .padding(.vertical, 6)
             }
             .buttonStyle(.plain)
+            NotePagesBar(document: document)
             Rectangle().fill(Palette.ruling).frame(height: 1)
             MarkupTextView(text: $document.body, controller: textController)
         }
@@ -210,8 +215,27 @@ struct NoteEditorView: View {
                     .accessibilityLabel("Zwischenüberschrift")
                 Button { textController.apply(.bullet) } label: { Image(systemName: "list.bullet") }
                     .accessibilityLabel("Aufzählung")
-                Button { textController.apply(.plain) } label: { Image(systemName: "text.alignleft") }
-                    .accessibilityLabel("Normaler Text")
+                Button { textController.toggleCheckbox() } label: { Image(systemName: "checklist") }
+                    .accessibilityLabel("Checkliste, abhaken")
+                Menu {
+                    Button { textController.apply(.callout) } label: { Label("Merkkasten", systemImage: "text.quote") }
+                    Button { textController.insert("| Spalte | Spalte |\n|---|---|\n| | |\n") } label: {
+                        Label("Tabelle", systemImage: "tablecells")
+                    }
+                    Button { textController.insert("---\n") } label: { Label("Trennlinie", systemImage: "minus") }
+                    Button { textController.apply(.plain) } label: { Label("Normaler Text", systemImage: "text.alignleft") }
+                    Menu {
+                        ForEach(linkTargets) { note in
+                            Button(note.title) { textController.insert("[[\(note.title)]]") }
+                        }
+                        Button { textController.insert("[[Neue Seite]]") } label: { Label("Neue Seite …", systemImage: "plus") }
+                    } label: {
+                        Label("Link zu Notiz", systemImage: "link")
+                    }
+                } label: {
+                    Image(systemName: "plus.circle")
+                }
+                .accessibilityLabel("Mehr Formate")
                 Spacer()
                 Button { textController.endEditing() } label: { Image(systemName: "keyboard.chevron.compact.down") }
                     .accessibilityLabel("Tastatur ausblenden")
