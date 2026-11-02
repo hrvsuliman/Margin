@@ -300,6 +300,10 @@ private final class PageWriter {
     func measure(_ text: String, scale: CGFloat) -> CGFloat {
         var width: CGFloat = 0
         for character in text {
+            if character == " " {
+                width += (font.wordSpacing - font.letterSpacing) * x * scale
+                continue
+            }
             if let variant = font.variants(for: character)?.first {
                 width += (variant.advance + font.letterSpacing) * x * scale
             } else {
@@ -330,6 +334,12 @@ private final class PageWriter {
         }
 
         for character in text {
+            if character == " " {
+                flushFallback()
+                previous = nil
+                cursor += (font.wordSpacing - font.letterSpacing) * x * scale
+                continue
+            }
             guard let options = font.variants(for: character), !options.isEmpty else {
                 if pendingFallback.isEmpty { fallbackStart = cursor }
                 pendingFallback.append(character)
