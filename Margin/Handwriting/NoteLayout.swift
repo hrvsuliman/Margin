@@ -110,10 +110,10 @@ enum NoteLayout {
         let writer = PageWriter(settings: settings, font: font, seed: content.seed)
 
         if settings.showHeader && !content.header.isEmpty {
-            writer.writeRightAligned(content.header, scale: 0.8)
+            writer.writeRightAligned(writer.normalize(content.header), scale: 0.8)
             writer.nextLine()
         }
-        let title = content.title.trimmingCharacters(in: .whitespaces)
+        let title = writer.normalize(content.title).trimmingCharacters(in: .whitespaces)
         var previous: NoteBlock? = nil
         if !title.isEmpty {
             writer.writeParagraph(title, scale: 1.5, underline: true)
@@ -170,7 +170,7 @@ private final class PageWriter {
     /// Characters without a glyph are replaced by close equivalents first.
     func normalize(_ text: String) -> String {
         var result = text.replacingOccurrences(of: "\t", with: "    ")
-        let replacements: [(String, String)] = [("…", "..."), ("—", "-"), ("–", "-"), ("‚", ","), ("‘", "'"), ("’", "'"), ("»", "\""), ("«", "\""), ("”", "“")]
+        let replacements: [(String, String)] = [("…", "..."), ("·", "-"), ("•", "-"), ("—", "-"), ("–", "-"), ("‚", ","), ("‘", "'"), ("’", "'"), ("»", "\""), ("«", "\""), ("”", "“")]
         for (from, to) in replacements where !font.has(Character(from)) {
             result = result.replacingOccurrences(of: from, with: to)
         }
