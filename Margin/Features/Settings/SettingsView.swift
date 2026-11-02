@@ -70,6 +70,24 @@ struct SettingsView: View {
 
             Section {
                 NavigationLink {
+                    AssistantSettingsView()
+                } label: {
+                    Label("Claude (KI-Assistent)", systemImage: "sparkles")
+                }
+                NavigationLink {
+                    MCPSettingsView()
+                } label: {
+                    Label("Claude am PC verbinden (MCP)", systemImage: "desktopcomputer")
+                }
+            } header: {
+                Text("Claude")
+            } footer: {
+                Text("Freiwillig. Nichts wird gesendet, solange du Claude nicht benutzt.")
+            }
+            .marginRow()
+
+            Section {
+                NavigationLink {
                     ProfilesView()
                 } label: {
                     Label("Handschrift", systemImage: "signature")
@@ -111,7 +129,7 @@ struct SettingsView: View {
 
             Section("Über Margin") {
                 LabeledContent("Version", value: BuildInfo.current.displayVersion)
-                LabeledContent("Phase", value: "3 · Lernen")
+                LabeledContent("Phase", value: "4 · Lernen mit Claude")
             }
             .marginRow()
         }

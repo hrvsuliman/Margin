@@ -17,6 +17,7 @@ struct LearnView: View {
     @State private var review: ReviewRequest?
     @State private var sheet: EditorSheet?
     @State private var newCard = false
+    @State private var showAssistant = false
 
     private var upcoming: [Exam] {
         let today = Calendar.school.startOfDay(for: .now)
@@ -35,6 +36,25 @@ struct LearnView: View {
                     }
                     .marginRow()
                 }
+
+                Section {
+                    Button {
+                        showAssistant = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "sparkles")
+                                .font(.title3)
+                                .foregroundStyle(Palette.marginRed)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Claude fragen").foregroundStyle(Palette.ink)
+                                Text("Erklären, zusammenfassen, Karteikarten, abfragen – mit deinem Material")
+                                    .font(.caption)
+                                    .foregroundStyle(Palette.secondaryInk)
+                            }
+                        }
+                    }
+                }
+                .marginRow()
 
                 examsSection
                 cardsSection
@@ -86,6 +106,7 @@ struct LearnView: View {
             }
             .fullScreenCover(item: $focus) { FocusView(request: $0) }
             .fullScreenCover(item: $review) { FlashcardReviewView(cards: $0.cards) }
+            .sheet(isPresented: $showAssistant) { AssistantView() }
         }
     }
 

@@ -31,6 +31,7 @@ struct NoteEditorView: View {
     @State private var export: ExportFile?
     @State private var imageItem: PhotosPickerItem?
     @State private var showImages = false
+    @State private var showAssistant = false
 
     private var myImages: [NoteImage] { noteImages.filter { $0.noteUID == document.uid } }
 
@@ -92,6 +93,12 @@ struct NoteEditorView: View {
         .sheet(item: $export) { file in
             NavigationStack { ExportPreviewView(file: file) }
                 .tint(Palette.marginRed)
+        }
+        .sheet(isPresented: $showAssistant) {
+            AssistantView(initialAttachments: [AssistantAttachment(
+                title: document.title.isEmpty ? "Diese Notiz" : document.title, symbol: "doc.text",
+                block: ClaudeClient.text("Notiz „\(document.title)“ aus Margin (id \(document.uid.uuidString)):\n\n\(document.body)")
+            )])
         }
         .sheet(isPresented: $showImages) {
             NavigationStack { NoteImagesView(document: document) }
@@ -299,6 +306,13 @@ struct NoteEditorView: View {
                 Image(systemName: "square.and.arrow.down")
             }
             .accessibilityLabel("Text importieren")
+
+            Button {
+                showAssistant = true
+            } label: {
+                Image(systemName: "sparkles")
+            }
+            .accessibilityLabel("Claude zu dieser Notiz fragen")
 
             Button {
                 showDetails = true

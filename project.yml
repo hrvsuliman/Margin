@@ -36,6 +36,7 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Damit Claude auf deinem PC (Claude Code oder Claude Desktop) im selben WLAN auf Margin zugreifen kann – nur wenn du „Claude verbinden“ einschaltest."
         INFOPLIST_KEY_NSCameraUsageDescription: "Margin nutzt die Kamera, um deine ausgefüllte Handschrift-Vorlage einzuscannen. Die Bilder bleiben auf dem iPhone."
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: YES
