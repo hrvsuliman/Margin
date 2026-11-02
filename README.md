@@ -1,6 +1,6 @@
 # Margin
 
-A native iPhone app (Swift + SwiftUI, iOS 17+) for school life: handwritten notes in your own handwriting, a school planner and calendar, and an exam-prep assistant.
+A native iPhone app (Swift + SwiftUI, iOS 17+, German UI) for school life: handwritten notes in your own handwriting, a school planner and calendar, and an exam-prep assistant.
 
 It is built entirely from Windows. You never need a Mac or Xcode on your own computer. GitHub rents a Mac in the cloud for each build.
 
@@ -19,8 +19,8 @@ It is built entirely from Windows. You never need a Mac or Xcode on your own com
 
 | Phase | What | Status |
 |---|---|---|
-| 0 | Build pipeline proof: one screen, icon, CI, unsigned .ipa | **Built, waiting for you to test on the iPhone** |
-| 1 | Navigation, dashboard, subjects, tasks, local storage, basic calendar, settings | Not started |
+| 0 | Build pipeline proof: one screen, icon, CI, unsigned .ipa | ✅ Tested on iPhone |
+| 1 | Navigation, Today screen, subjects, timetable, tasks, exams, calendar, reminders, settings, backup | **Built, waiting for you to test on the iPhone** |
 | 2 | Handwriting studio: capture, profile, rendering, document editor, PDF export | Not started |
 | 3 | Exam planner: topics, understanding tracker, roadmap, readiness | Not started |
 | 4 | AI learning assistant | Not started |
@@ -28,15 +28,24 @@ It is built entirely from Windows. You never need a Mac or Xcode on your own com
 
 Each phase starts only after the previous one builds and you've tested it on your iPhone. The plan and the technical decisions (including how the handwriting will work, honestly) are in [docs/ROADMAP.md](docs/ROADMAP.md).
 
-### Phase 0: what to check on your iPhone
+The app's interface is **German** (dates, Monday-first weeks, German school terms).
 
-1. The app installs and opens without crashing.
-2. The home screen icon shows the ruled paper with the red margin line and the "M".
-3. The screen shows **Version 0.1.0 (build N)**, where N matches the run number on GitHub.
-4. Switch your iPhone between light and dark mode (Control Centre). The paper changes colour and the "Light and dark mode" row updates.
-5. Tap **Test haptics**. You should feel a tap. If you don't, check Settings → Sounds & Haptics → System Haptics.
+### Phase 1: what to check on your iPhone
 
-If all five work, the pipeline is proven and we can start Phase 1.
+Installing over Phase 0 is fine (Phase 0 had no data).
+
+1. **Fächer:** on "Heute" tap **Fächer auswählen**, pick a few subjects, add one of your own via **Fächer › +**, change its colour, teacher and room. Reorder with **Bearbeiten**.
+2. **Stundenplan:** *Fächer › Stundenplan*. Pick a day, tap a free period, choose the subject. Use **Sichern und nächste Stunde** to fill a whole day quickly. Check the times under *Einstellungen › Stundenraster* match your school.
+3. **Heute:** shows the current or next lesson, today's timetable, tasks due by tomorrow, and exams in the next 4 weeks.
+4. **Aufgaben:** create a homework with subtasks and an attachment (photo or PDF). Try **Zur nächsten Stunde** for the due date. Tick it off (swipe right or tap the circle). Check the Offen / Überfällig / Erledigt filters.
+5. **Prüfungen:** add one from + on Heute or on a subject page. It shows on Heute, on the subject page and in the calendar.
+6. **Kalender:** month view (swipe to change month, dots for exams, tasks and events), week view, and day view (timeline with the red "now" line). Add a weekly recurring event. Long-press an entry in the month list to move it by a day or a week.
+7. **Ferien:** *Einstellungen › Ferien und freie Tage*. Lessons disappear on those days.
+8. **Erinnerungen:** allow notifications, then create a task with a reminder 2 minutes from now and lock the phone.
+9. **Backup:** *Einstellungen › Backup sichern* to the Files app, then **Backup wiederherstellen** from that file.
+10. **Dark mode** and **Erscheinungsbild** in Settings.
+
+Known Phase 1 limits: rescheduling is via edit or long-press (no drag and drop yet); editing a recurring event changes the whole series; exams don't have topics or a learning plan yet (Phase 3).
 
 ---
 
@@ -174,11 +183,15 @@ Margin/
 ├─ .github/workflows/
 │  └─ build-ios.yml            The cloud build: project → compile → .ipa → tests
 ├─ Margin/                     The app's source code
-│  ├─ App/                     App entry point
-│  ├─ DesignSystem/            Colours, paper background, shared UI pieces
-│  ├─ Features/                One folder per screen or feature
-│  ├─ Support/                 Small helpers (build info, …)
-│  └─ Resources/Assets.xcassets  App icon and images
+│  ├─ App/                     App entry, tabs, sheet routing
+│  ├─ DesignSystem/            Colours, rows, shared UI pieces
+│  ├─ Models/                  SwiftData models (subjects, lessons, tasks, exams …)
+│  ├─ Persistence/             Database setup + migrations, attachments, backup
+│  ├─ Services/                Calendar maths, timetable, reminders (no UI)
+│  ├─ Settings/                User preferences (school type, bell schedule …)
+│  ├─ Features/                One folder per area: Today, Calendar, Subjects, Tasks, Exams, Settings
+│  ├─ Support/                 German dates and formatting, build info
+│  └─ Resources/Assets.xcassets  App icon
 ├─ MarginTests/                Unit tests (run on a simulator in CI)
 ├─ Design/make_icon.py         Draws the placeholder icon (python Design/make_icon.py)
 └─ docs/ROADMAP.md             Phases and technical decisions

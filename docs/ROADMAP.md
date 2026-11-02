@@ -27,11 +27,11 @@ Rules:
 
 ---
 
-## Phase 0: build pipeline proof ✅ built
+## Phase 0: build pipeline proof ✅ tested on iPhone
 
 One SwiftUI screen, placeholder icon, XcodeGen, GitHub Actions, unsigned `.ipa`, a few unit tests. **Done when** it installs through Sideloadly and the checks in the README pass.
 
-## Phase 1: core app
+## Phase 1: core app (built, testing)
 
 - Tab navigation: **Today**, **Calendar**, **Subjects**, **Tasks**, plus **Settings**. Notes and Exams join in Phases 2 and 3.
 - SwiftData models with schema versioning: `Subject`, `Topic` (nested subtopics), `Lesson` (timetable slot, weekly recurrence, A/B weeks optional), `SchoolTask` (type, status, priority, due date, estimate, subtasks, attachments), `CalendarEvent`.
@@ -41,7 +41,9 @@ One SwiftUI screen, placeholder icon, XcodeGen, GitHub Actions, unsigned `.ipa`,
 - Calendar: month, week and day views, Monday first, German date formats by default; tap a day to see everything on it; recurring lessons.
 - Local notifications for task and event reminders.
 - Settings: school type, lesson times, first weekday, export/import backup (JSON) to the Files app.
-- **Open question for you:** should the app's language be **German** or **English**? Both are possible with a String Catalog. We pick one primary language now.
+- UI language: **German** (decided). Strings are written in German directly; a String Catalog can add English later.
+- Exams exist in a basic form (date, kind, room, reminder) so the dashboard and calendar can show them. Phase 3 extends the same model.
+- Not in Phase 1: drag and drop in the calendar (rescheduling is via edit or long-press), per-occurrence exceptions for recurring events, A/B weeks.
 
 ## Phase 2: handwriting studio
 
