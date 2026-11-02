@@ -1,0 +1,162 @@
+name: Build iOS
+
+# Runs on every push to main, and on demand from the Actions tab ("Run workflow").
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A newer push to the same branch cancels the older, still-running build.
+concurrency:
+  group: build-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build unsigned IPA
+    # macos-15 ships Xcode 16.4 (iOS 18.5 SDK) as its default.
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          echo "iOS SDK: $(xcrun --sdk iphoneos --show-sdk-version)"
+
+      - name: Install XcodeGen
+        run: |
+          brew install xcodegen
+          xcodegen --version
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build for iPhone (no code signing)
+        run: |
+          xcodebuild \
+            -project Margin.xcodeproj \
+            -scheme Margin \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build > build.log 2>&1 || {
+              echo "::group::Compiler errors"
+              grep -E -A3 "(error|fatal error):" build.log | head -150
+              echo "::endgroup::"
+              echo "::group::Last 80 lines of the build log"
+              tail -80 build.log
+              echo "::endgroup::"
+              echo "::error::Build failed. The full log is attached as the 'build-log' artifact."
+              exit 1
+            }
+          echo "Build succeeded."
+          grep -E "warning:" build.log | sort -u | head -40 || true
+
+      - name: Check the built app
+        run: |
+          APP=build/Build/Products/Release-iphoneos/Margin.app
+          test -d "$APP" || { echo "::error::Margin.app was not produced"; exit 1; }
+          PLIST="$APP/Info.plist"
+          echo "Bundle ID:     $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")"
+          echo "Version:       $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")"
+          echo "Build:         $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")"
+          echo "Minimum iOS:   $(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$PLIST")"
+          echo "Architectures: $(lipo -archs "$APP/Margin")"
+          lipo -archs "$APP/Margin" | grep -q arm64 || { echo "::error::Binary is not built for arm64 (iPhone)"; exit 1; }
+          test -f "$APP/Assets.car" || { echo "::error::Asset catalog (app icon) is missing"; exit 1; }
+          echo "App bundle contents:"
+          ls -la "$APP"
+
+      - name: Package .ipa
+        id: package
+        run: |
+          APP=build/Build/Products/Release-iphoneos/Margin.app
+          VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist")
+          NAME="Margin-${VERSION}-build-${{ github.run_number }}"
+          rm -rf Payload dist
+          mkdir -p Payload dist
+          cp -R "$APP" Payload/
+          zip -qry "dist/${NAME}.ipa" Payload
+          unzip -l "dist/${NAME}.ipa" | head -20
+          ls -lh dist
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload .ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: dist/*.ipa
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
+          compression-level: 0 # an .ipa is already a zip
+
+      - name: Write download hint
+        run: |
+          {
+            echo "### ${{ steps.package.outputs.name }}"
+            echo ""
+            echo "Download it from **Artifacts** at the bottom of this page, unzip it, then install the .ipa with Sideloadly."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Unit tests run on an iPhone simulator, after the .ipa is already uploaded,
+      # so a failing test never stops you from getting a build.
+      - name: Pick an iPhone simulator
+        id: simulator
+        run: |
+          xcodebuild -project Margin.xcodeproj -scheme Margin -showdestinations > destinations.txt 2>&1 || true
+          ID=$(sed '/Ineligible/q' destinations.txt \
+            | grep "platform:iOS Simulator" \
+            | grep "name:iPhone" \
+            | head -1 \
+            | sed -E 's/.*id:([^,]+),.*/\1/')
+          if [ -z "$ID" ]; then
+            cat destinations.txt
+            echo "::error::No iPhone simulator found on this runner"
+            exit 1
+          fi
+          grep -m1 "$ID" destinations.txt
+          echo "id=${ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Run unit tests
+        run: |
+          xcodebuild test \
+            -project Margin.xcodeproj \
+            -scheme Margin \
+            -destination "id=${{ steps.simulator.outputs.id }}" \
+            -derivedDataPath build-tests \
+            > test.log 2>&1 || {
+              echo "::group::Errors and failing tests"
+              grep -E -A3 "(error|fatal error):|Test Case .* failed" test.log | head -150
+              echo "::endgroup::"
+              echo "::group::Last 80 lines of the test log"
+              tail -80 test.log
+              echo "::endgroup::"
+              echo "::error::Unit tests failed. The .ipa was still uploaded. The full log is in the 'build-log' artifact."
+              exit 1
+            }
+          grep -E "Test Suite 'All tests'|Executed [0-9]+ test" test.log | tail -3
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            build.log
+            test.log
+          if-no-files-found: ignore
+          overwrite: true
+          retention-days: 14
