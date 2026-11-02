@@ -295,3 +295,46 @@ final class NoteImage {
         self.createdAt = .now
     }
 }
+
+/// Which AI answers in a tutor conversation.
+enum TutorEngine: String, CaseIterable, Identifiable, Codable, Sendable {
+    /// Claude through the Anthropic API with the user's own key.
+    case claudeAPI
+    /// Apple's on-device model (iOS 26, Apple Intelligence devices) – free and offline.
+    case onDevice
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .claudeAPI: "Claude (API-Schlüssel)"
+        case .onDevice: "Apple Intelligence (auf dem iPhone)"
+        }
+    }
+}
+
+/// A saved tutor conversation ("Verlauf").
+@Model
+final class ChatThread {
+    var uid: UUID = UUID()
+    var title: String = ""
+    var engineRaw: String = TutorEngine.claudeAPI.rawValue
+    var createdAt: Date = Date.now
+    var updatedAt: Date = Date.now
+    /// The visible chat (JSON).
+    var itemsData: Data = Data()
+    /// The raw API messages, so a Claude conversation can be continued exactly (JSON).
+    var messagesData: Data = Data()
+
+    init(engine: TutorEngine) {
+        self.uid = UUID()
+        self.engineRaw = engine.rawValue
+        self.createdAt = .now
+        self.updatedAt = .now
+    }
+
+    var engine: TutorEngine {
+        get { TutorEngine(rawValue: engineRaw) ?? .claudeAPI }
+        set { engineRaw = newValue.rawValue }
+    }
+}

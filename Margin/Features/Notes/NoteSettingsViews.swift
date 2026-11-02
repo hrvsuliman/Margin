@@ -256,6 +256,48 @@ struct NoteImagesView: View {
     }
 }
 
+/// Pages rendered as images.
+struct ImageExport: Identifiable {
+    let id = UUID()
+    let urls: [URL]
+    let title: String
+}
+
+struct ImageExportView: View {
+    @Environment(\.dismiss) private var dismiss
+    let export: ImageExport
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                ForEach(export.urls, id: \.self) { url in
+                    if let image = UIImage(contentsOfFile: url.path) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                            .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+                    }
+                }
+            }
+            .padding(16)
+        }
+        .background(Palette.paper)
+        .navigationTitle(export.urls.count == 1 ? "Bild" : "\(export.urls.count) Bilder")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Schließen") { dismiss() }
+            }
+            ToolbarItem(placement: .primaryAction) {
+                ShareLink(items: export.urls) {
+                    Label("Teilen oder in Fotos sichern", systemImage: "square.and.arrow.up")
+                }
+            }
+        }
+    }
+}
+
 /// A finished PDF, ready to look at and share.
 struct ExportFile: Identifiable {
     let id = UUID()

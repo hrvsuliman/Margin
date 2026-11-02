@@ -1,0 +1,13 @@
+# Cloudflare Worker for the Margin Connector (free plan is enough).
+# Deploy from this folder:  npx wrangler login   then   npx wrangler deploy
+name = "margin-connector"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[[durable_objects.bindings]]
+name = "STORE"
+class_name = "MarginStore"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MarginStore"]

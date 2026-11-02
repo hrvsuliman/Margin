@@ -14,8 +14,9 @@ concurrency:
 jobs:
   build:
     name: Build unsigned IPA
-    # macos-15 ships Xcode 16.4 (iOS 18.5 SDK) as its default.
-    runs-on: macos-15
+    # macos-26 ships Xcode 26 (iOS 26 SDK), needed for Apple's on-device model
+    # (Foundation Models). The app still runs on iOS 17 and newer.
+    runs-on: macos-26
     timeout-minutes: 30
     env:
       HOMEBREW_NO_AUTO_UPDATE: "1"
@@ -23,6 +24,9 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v4
+
+      - name: Test the Claude connector (JavaScript)
+        run: node connector/test.mjs
 
       - name: Show toolchain
         run: |

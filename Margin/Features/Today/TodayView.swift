@@ -212,7 +212,7 @@ struct TodayView: View {
                         symbol: holiday == nil ? "sun.max" : "beach.umbrella",
                         title: holiday == nil ? "Heute ist nichts geplant" : "Schulfrei",
                         message: lessons.isEmpty
-                            ? "Trag deinen Stundenplan unter Fächer › Stundenplan ein."
+                            ? "Trag deinen Stundenplan unter Lernen › Fächer und Themen › Stundenplan ein."
                             : "Neue Aufgaben, Prüfungen und Termine legst du mit + an."
                     )
                 }

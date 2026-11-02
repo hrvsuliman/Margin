@@ -351,7 +351,11 @@ enum MarginTools {
         let cards = all(Flashcard.self, context)
             .filter { subject == nil || $0.subjectUID == subject?.uid }
             .filter { !dueOnly || $0.due <= now }
-        return .ok(cards.prefix(100).map { ["front": $0.front, "back": $0.back, "due": $0.due <= now] as [String: Any] })
+        let names = Dictionary(all(SchoolSubject.self, context).map { ($0.uid, $0.name) }, uniquingKeysWith: { a, _ in a })
+        return .ok(cards.prefix(150).map { card -> [String: Any] in
+            ["front": card.front, "back": card.back, "due": card.due <= now,
+             "subject": card.subjectUID.flatMap { names[$0] } ?? ""]
+        })
     }
 
     private static func stats(_ context: ModelContext) -> ToolOutcome {

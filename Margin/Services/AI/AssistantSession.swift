@@ -1,6 +1,9 @@
 import Foundation
 import Observation
 import SwiftData
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
 
 /// Settings for the in-app assistant (the API key itself lives in the Keychain).
 enum AssistantPrefs {
@@ -30,7 +33,40 @@ struct AssistantAttachment: Identifiable {
     let id = UUID()
     let title: String
     let symbol: String
+    /// The content block sent to Claude.
     let block: [String: Any]
+    /// Plain text of the material, for the on-device model (which reads text only).
+    var text: String? = nil
+}
+
+/// Apple's on-device language model (Foundation Models, iOS 26).
+enum OnDeviceModel {
+    /// Nil when the model can be used, otherwise why not.
+    static var unavailableReason: String? {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+            switch SystemLanguageModel.default.availability {
+            case .available:
+                return nil
+            case .unavailable(.deviceNotEligible):
+                return "Dieses iPhone unterstützt Apple Intelligence nicht (ab iPhone 15 Pro)."
+            case .unavailable(.appleIntelligenceNotEnabled):
+                return "Schalte Apple Intelligence in den iOS-Einstellungen ein."
+            case .unavailable(.modelNotReady):
+                return "Das Apple-Modell wird noch geladen. Versuch es später noch einmal."
+            case .unavailable:
+                return "Apple Intelligence ist gerade nicht verfügbar."
+            @unknown default:
+                return "Apple Intelligence ist gerade nicht verfügbar."
+            }
+        }
+        return "Braucht iOS 26 und ein iPhone mit Apple Intelligence (ab iPhone 15 Pro)."
+        #else
+        return "Diese Version wurde ohne Apple Intelligence gebaut."
+        #endif
+    }
+
+    static var isAvailable: Bool { unavailableReason == nil }
 }
 
 /// One conversation with Claude, including the tool loop.
@@ -63,12 +99,34 @@ final class AssistantSession {
     private(set) var busy = false
     private(set) var approval: Approval?
     var attachments: [AssistantAttachment] = []
+    private(set) var engine: TutorEngine
 
     private var messages: [[String: Any]] = []
     private let context: ModelContext
+    /// The saved conversation this session writes to.
+    private(set) var thread: ChatThread?
+    /// A `LanguageModelSession` (kept untyped so the class works before iOS 26).
+    private var onDeviceSession: AnyObject?
 
-    init(context: ModelContext) {
+    init(context: ModelContext, thread: ChatThread? = nil, engine: TutorEngine? = nil) {
         self.context = context
+        self.thread = thread
+        self.engine = thread?.engine ?? engine ?? Self.defaultEngine
+        if let thread {
+            items = Self.decodeItems(thread.itemsData)
+            messages = (try? JSONSerialization.jsonObject(with: thread.messagesData)) as? [[String: Any]] ?? []
+        }
+    }
+
+    /// Claude when a key is stored, otherwise the on-device model if available.
+    static var defaultEngine: TutorEngine {
+        if Keychain.read(ClaudeClient.keyAccount) != nil && AssistantPrefs.consented { return .claudeAPI }
+        return OnDeviceModel.isAvailable ? .onDevice : .claudeAPI
+    }
+
+    func switchEngine(_ engine: TutorEngine) {
+        guard items.isEmpty else { return }
+        self.engine = engine
     }
 
     static let systemPrompt = """
@@ -89,11 +147,71 @@ final class AssistantSession {
         items = []
         messages = []
         attachments = []
+        thread = nil
+        onDeviceSession = nil
+    }
+
+    // MARK: History
+
+    private struct StoredItem: Codable {
+        var kind: String
+        var text: String
+        var extra: [String]
+        var ok: Bool
+    }
+
+    private static func decodeItems(_ data: Data) -> [Item] {
+        let stored = (try? JSONDecoder().decode([StoredItem].self, from: data)) ?? []
+        return stored.map { entry in
+            switch entry.kind {
+            case "user": .user(id: UUID(), text: entry.text, attachments: entry.extra)
+            case "assistant": .assistant(id: UUID(), text: entry.text)
+            case "action": .action(id: UUID(), label: entry.text, ok: entry.ok)
+            default: .notice(id: UUID(), text: entry.text)
+            }
+        }
+    }
+
+    /// Saves the conversation so it appears in the Verlauf.
+    private func persist() {
+        let stored: [StoredItem] = items.map { item in
+            switch item {
+            case let .user(_, text, attachments): StoredItem(kind: "user", text: text, extra: attachments, ok: true)
+            case let .assistant(_, text): StoredItem(kind: "assistant", text: text, extra: [], ok: true)
+            case let .action(_, label, ok): StoredItem(kind: "action", text: label, extra: [], ok: ok)
+            case let .notice(_, text): StoredItem(kind: "notice", text: text, extra: [], ok: false)
+            }
+        }
+        guard !stored.isEmpty else { return }
+        let target: ChatThread
+        if let thread {
+            target = thread
+        } else {
+            target = ChatThread(engine: engine)
+            context.insert(target)
+            thread = target
+        }
+        if target.title.isEmpty, let first = stored.first(where: { $0.kind == "user" }) {
+            let base = first.text.isEmpty ? (first.extra.first ?? "Material") : first.text
+            target.title = String(base.prefix(70))
+        }
+        target.itemsData = (try? JSONEncoder().encode(stored)) ?? Data()
+        if JSONSerialization.isValidJSONObject(messages) {
+            target.messagesData = (try? JSONSerialization.data(withJSONObject: messages)) ?? Data()
+        }
+        target.updatedAt = .now
+        try? context.save()
     }
 
     func send(_ text: String) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !busy, !trimmed.isEmpty || !attachments.isEmpty else { return }
+        if engine == .onDevice {
+            await sendOnDevice(trimmed)
+            persist()
+            return
+        }
+        defer { persist() }
         guard let client = ClaudeClient.stored(model: AssistantPrefs.model) else {
             items.append(.notice(id: UUID(), text: ClaudeError.noKey.localizedDescription))
             return
@@ -172,6 +290,55 @@ final class AssistantSession {
             results.append(["type": "tool_result", "tool_use_id": id, "content": outcome.text, "is_error": outcome.isError])
         }
         return results
+    }
+
+    // MARK: On-device
+
+    private func sendOnDevice(_ text: String) async {
+        let material = attachments.compactMap { attachment in
+            attachment.text.map { "Material „\(attachment.title)“:\n\($0)" }
+        }.joined(separator: "\n\n")
+        let skipped = attachments.filter { $0.text == nil }.map(\.title)
+        items.append(.user(id: UUID(), text: text, attachments: attachments.map(\.title)))
+        attachments = []
+        if !skipped.isEmpty {
+            items.append(.notice(id: UUID(), text: "Das Modell auf dem iPhone kann nur Text lesen – ohne: \(skipped.joined(separator: ", "))."))
+        }
+        // The on-device model has a small context window: keep material short.
+        let prompt = [String(material.prefix(6000)), text.isEmpty ? "Schau dir das Material an." : text]
+            .filter { !$0.isEmpty }.joined(separator: "\n\n")
+
+        busy = true
+        defer { busy = false }
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *), OnDeviceModel.isAvailable {
+            do {
+                let session: LanguageModelSession
+                if let existing = onDeviceSession as? LanguageModelSession {
+                    session = existing
+                } else {
+                    session = LanguageModelSession(instructions: onDeviceInstructions())
+                    onDeviceSession = session
+                }
+                let response = try await session.respond(to: prompt)
+                items.append(.assistant(id: UUID(), text: response.content))
+            } catch {
+                onDeviceSession = nil
+                items.append(.notice(id: UUID(), text: "Das Modell auf dem iPhone konnte nicht antworten (\(error.localizedDescription)). Bei viel Text: neues Gespräch starten oder weniger Material anhängen."))
+            }
+            return
+        }
+        #endif
+        items.append(.notice(id: UUID(), text: OnDeviceModel.unavailableReason ?? "Apple Intelligence ist nicht verfügbar."))
+    }
+
+    private func onDeviceInstructions() -> String {
+        var instructions = Self.systemPrompt
+            .replacingOccurrences(of: "Du bist der Lernassistent in Margin", with: "Du bist der Lerntutor in Margin")
+        instructions += "\n\nDu kannst in Margin nichts ändern. Wenn etwas angelegt werden soll, sag der Person, wie sie es selbst macht."
+        let overview = MarginTools.call("get_overview", input: [:], context: context).text
+        instructions += "\n\nAktueller Stand aus Margin (JSON): \(overview.prefix(1500))"
+        return instructions
     }
 
     private func ask(label: String, details: String) async -> Bool {

@@ -28,6 +28,7 @@ struct BackupFile: Codable {
     var glyphs: [GlyphDTO]?
     var notes: [NoteDTO]?
     var learning: LearningDTO?
+    var chats: [ChatDTO]?
 
     struct SubjectDTO: Codable {
         var uid: UUID; var name: String; var colorKey: String; var teacher: String; var room: String
@@ -116,6 +117,11 @@ struct BackupFile: Codable {
     struct GradeSetupDTO: Codable { var uid: UUID; var subject: UUID?; var writtenShare: Double; var goal: Double? }
     struct NoteImageDTO: Codable {
         var uid: UUID; var note: UUID?; var caption: String; var heightLines: Int; var createdAt: Date; var data: Data
+    }
+
+    struct ChatDTO: Codable {
+        var uid: UUID; var title: String; var engine: String; var createdAt: Date; var updatedAt: Date
+        var items: Data; var messages: Data
     }
 
     struct NoteDTO: Codable {
@@ -219,6 +225,10 @@ enum BackupService {
                                 scale: $0.scale, baselineOffset: $0.baselineOffset, profile: $0.profile?.uid)
         }
         file.learning = exportLearning(context)
+        file.chats = all(ChatThread.self, context).map {
+            BackupFile.ChatDTO(uid: $0.uid, title: $0.title, engine: $0.engineRaw, createdAt: $0.createdAt,
+                               updatedAt: $0.updatedAt, items: $0.itemsData, messages: $0.messagesData)
+        }
         file.notes = all(NoteDocument.self, context).map { note in
             BackupFile.NoteDTO(
                 uid: note.uid, title: note.title, body: note.body, folder: note.folder, noteDate: note.noteDate,
@@ -415,6 +425,16 @@ enum BackupService {
         if let learning = file.learning {
             try restoreLearning(learning, context: context)
         }
+        for dto in file.chats ?? [] {
+            let thread = ChatThread(engine: TutorEngine(rawValue: dto.engine) ?? .claudeAPI)
+            thread.uid = dto.uid
+            thread.title = dto.title
+            thread.createdAt = dto.createdAt
+            thread.updatedAt = dto.updatedAt
+            thread.itemsData = dto.items
+            thread.messagesData = dto.messages
+            context.insert(thread)
+        }
 
         if let settings, let snapshot = file.settings {
             snapshot.apply(to: settings)
@@ -445,6 +465,7 @@ enum BackupService {
         all(Grade.self, context).forEach { context.delete($0) }
         all(GradeSetup.self, context).forEach { context.delete($0) }
         all(NoteImage.self, context).forEach { context.delete($0) }
+        all(ChatThread.self, context).forEach { context.delete($0) }
         try? context.save()
         AttachmentStore.removeAllFiles()
     }

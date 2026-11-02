@@ -7,8 +7,18 @@ struct SubjectsView: View {
     @State private var sheet: EditorSheet?
     @State private var pendingDelete: SchoolSubject?
 
+    /// True when shown inside another tab's navigation (Lernen).
+    var embedded = false
+
     var body: some View {
-        NavigationStack {
+        if embedded {
+            content
+        } else {
+            NavigationStack { content }
+        }
+    }
+
+    private var content: some View {
             List {
                 Section {
                     NavigationLink {
@@ -98,7 +108,6 @@ struct SubjectsView: View {
             } message: { _ in
                 Text(SubjectActions.deleteMessage)
             }
-        }
     }
 
     private func move(from source: IndexSet, to destination: Int) {

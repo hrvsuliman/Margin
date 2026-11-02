@@ -30,6 +30,14 @@ Each phase starts only after the previous one builds and you've tested it on you
 
 The app's interface is **German** (dates, Monday-first weeks, German school terms).
 
+### Phase 5 (round A): what to check
+
+1. **Tabs:** Heute · Planer · Lernen · Notizen · **Tutor**. Fächer and Noten are now at the top of Lernen.
+2. **Tutor:** *Neues Gespräch* – choose **Claude** (API key) or **Apple (offline)** (iPhone 15 Pro or newer with iOS 26 and Apple Intelligence on: free, nothing leaves the phone). Every conversation is saved under **Verlauf**; open one to continue it.
+3. **In der Claude-App:** the questions in the Tutor tab open the Claude app with your normal account. With the connector set up (see below) Claude can read and change Margin data.
+4. **Photos:** attaching photos works again everywhere (it was broken – the picker didn't open from menus), and you can now **take a photo with the camera** in notes (glue in, or recognise board text), attachments and the tutor.
+5. **Export as images:** in a note › Handschrift › *Teilen › Als Bilder* – one PNG per page, to save in Photos or send.
+
 ### Phases 3 and 4: what to check on your iPhone
 
 Install over the current version – the database migrates automatically (version 3). **Save a backup first.**
@@ -203,6 +211,31 @@ Now Margin opens.
 - **Some Apple services need a paid developer account (99 €/year):** iCloud sync, push notifications from a server, and sharing data with widgets through App Groups. Local notifications (reminders), on-device storage, the Keychain, PDF export and the Files app all work with a free account. That's why iCloud sync stays in "later".
 
 ---
+
+## Claude-Connector einrichten (Claude ohne API-Schlüssel)
+
+With the connector, Claude uses your **normal Claude subscription** (no API key, no extra cost) and can read your Margin data – in the Claude app on the iPhone, Claude on the PC and on claude.ai. Changes Claude makes (flashcards, notes, tasks …) are queued and applied when Margin syncs.
+
+How it works: the iPhone can't be reached from the internet, so a tiny relay runs in **your own free Cloudflare account**. Margin uploads a snapshot of your data whenever you open it or change something; Claude talks to the relay. A read-only web view of your data for the PC comes for free.
+
+One-time setup on the PC (Node.js is needed – you already have it):
+
+1. Create a free account at <https://dash.cloudflare.com/sign-up>.
+2. In Git Bash, in the `Margin/connector` folder:
+   ```bash
+   npx wrangler login
+   ```
+   ```bash
+   npx wrangler deploy
+   ```
+   The last line shows the address, e.g. `https://margin-connector.<name>.workers.dev`.
+3. On the iPhone: **Tutor › Claude-Connector** › paste that address. Margin shows the **connector address** (with your secret key).
+4. On claude.ai (PC browser): **Settings › Connectors › Add custom connector** › paste the connector address. It then works in the Claude app on the iPhone too.
+5. Optional: *Claude darf Änderungen vormerken* – then Claude can create flashcards, notes, tasks, exams.
+
+Try in the Claude app: *"Was steht bei mir in Margin diese Woche an?"* or *"Frag mich zu meiner nächsten Prüfung ab und trag danach mein Verständnis ein."*
+
+Notes: your data is stored in your own Cloudflare account (not shared with anyone, not readable without the secret address). Claude sees the state of the last sync. `node connector/test.mjs` runs the connector's tests locally.
 
 ## Claude on your PC (MCP)
 

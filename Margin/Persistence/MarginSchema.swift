@@ -40,21 +40,33 @@ enum MarginSchemaV3: VersionedSchema {
     }
 }
 
+/// Phase 5: saved tutor conversations.
+enum MarginSchemaV4: VersionedSchema {
+    static let versionIdentifier = Schema.Version(4, 0, 0)
+
+    static var models: [any PersistentModel.Type] {
+        MarginSchemaV3.models + [ChatThread.self]
+    }
+}
+
 enum MarginMigrationPlan: SchemaMigrationPlan {
-    static var schemas: [any VersionedSchema.Type] { [MarginSchemaV1.self, MarginSchemaV2.self, MarginSchemaV3.self] }
+    static var schemas: [any VersionedSchema.Type] {
+        [MarginSchemaV1.self, MarginSchemaV2.self, MarginSchemaV3.self, MarginSchemaV4.self]
+    }
 
     static var stages: [MigrationStage] {
         // Each version only added new tables, so SwiftData can migrate automatically.
         [
             .lightweight(fromVersion: MarginSchemaV1.self, toVersion: MarginSchemaV2.self),
             .lightweight(fromVersion: MarginSchemaV2.self, toVersion: MarginSchemaV3.self),
+            .lightweight(fromVersion: MarginSchemaV3.self, toVersion: MarginSchemaV4.self),
         ]
     }
 }
 
 @MainActor
 enum Persistence {
-    static let schema = Schema(versionedSchema: MarginSchemaV3.self)
+    static let schema = Schema(versionedSchema: MarginSchemaV4.self)
 
     /// The app's database, stored on the device only.
     static let container: ModelContainer = {
@@ -85,5 +97,6 @@ extension ModelContext {
             assertionFailure("Speichern fehlgeschlagen: \(error)")
         }
         ReminderService.scheduleRefresh(context: self)
+        ConnectorSync.shared.scheduleSync(context: self)
     }
 }
