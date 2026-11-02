@@ -26,8 +26,14 @@ struct FlashcardDeckView: View {
     @State private var editing: Flashcard?
     @State private var creating = false
     @State private var review: ReviewRequest?
+    @State private var shareURL: URL?
+    @Query private var subjects: [SchoolSubject]
 
     private var cards: [Flashcard] { allCards.filter(scope.contains) }
+    private var subjectName: String? {
+        if case .subject(let id?) = scope { return subjects.first { $0.uid == id }?.name }
+        return nil
+    }
     private var due: [Flashcard] { cards.filter { $0.due <= .now } }
 
     var body: some View {
@@ -90,6 +96,18 @@ struct FlashcardDeckView: View {
                 }
                 .accessibilityLabel("Neue Karte")
             }
+            ToolbarItem(placement: .secondaryAction) {
+                Button {
+                    shareURL = try? ShareService.deck(title: title, subject: subjectName, cards: cards)
+                } label: {
+                    Label("Mit Mitschülern teilen", systemImage: "square.and.arrow.up")
+                }
+                .disabled(cards.isEmpty)
+            }
+        }
+        .sheet(item: $shareURL) { url in
+            ActivityView(items: [url])
+                .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $creating) {
             NavigationStack { FlashcardEditor(card: nil, scope: scope) }

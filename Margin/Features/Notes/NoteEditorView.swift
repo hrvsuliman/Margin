@@ -41,6 +41,7 @@ struct NoteEditorView: View {
     @State private var showImages = false
     @State private var showAssistant = false
     @State private var imageExport: ImageExport?
+    @State private var classmateShare: URL?
 
     private var myImages: [NoteImage] { noteImages.filter { $0.noteUID == document.uid } }
 
@@ -118,6 +119,10 @@ struct NoteEditorView: View {
                 camera = nil
             }
             .ignoresSafeArea()
+        }
+        .sheet(item: $classmateShare) { url in
+            ActivityView(items: [url])
+                .presentationDetents([.medium, .large])
         }
         .sheet(item: $imageExport) { export in
             NavigationStack { ImageExportView(export: export) }
@@ -273,6 +278,12 @@ struct NoteEditorView: View {
                         exportImages()
                     } label: {
                         Label("Als Bilder (eine pro Seite)", systemImage: "photo.on.rectangle")
+                    }
+                    Button {
+                        let subject = subjects.first { $0.uid == document.subjectUID }?.name
+                        classmateShare = try? ShareService.note(document, subject: subject)
+                    } label: {
+                        Label("Für Mitschüler (.margin)", systemImage: "person.2")
                     }
                 } label: {
                     Label("Teilen", systemImage: "square.and.arrow.up")

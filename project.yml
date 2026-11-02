@@ -31,7 +31,11 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.hrvsuliman.margin
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: YES
+        # Extra keys (document types, background modes) merged into the generated plist.
+        INFOPLIST_FILE: Config/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: Margin
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Für Aufnahmen von Unterrichtsstunden, die Margin auf dem iPhone in Text umwandelt."
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Damit Margin deine Aufnahmen auf dem iPhone in Text umwandeln kann."
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES

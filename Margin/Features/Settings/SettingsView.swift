@@ -16,6 +16,7 @@ struct SettingsView: View {
     @State private var showImporter = false
     @State private var pendingBackup: BackupFile?
     @State private var confirmWipe = false
+    @State private var pickingBackupFolder = false
     @State private var message: String?
 
     var body: some View {
@@ -33,6 +34,11 @@ struct SettingsView: View {
                     LabeledContent("Stundenraster", value: "\(settings.periods.count) Stunden")
                 }
                 NavigationLink("Ferien und freie Tage") { HolidaysView() }
+                NavigationLink {
+                    SchoolConnectionView()
+                } label: {
+                    LabeledContent("Stundenplan verbinden", value: SchoolSync.shared.source.title)
+                }
                 Picker("Notenskala", selection: $settings.gradeScale) {
                     ForEach(GradeScale.allCases) { Text($0.title).tag($0) }
                 }
@@ -109,6 +115,22 @@ struct SettingsView: View {
                     exportBackup()
                 } label: {
                     Label("Backup sichern", systemImage: "square.and.arrow.up")
+                }
+                Button {
+                    pickingBackupFolder = true
+                } label: {
+                    LabeledContent {
+                        Text(AutoBackup.folderName ?? "aus")
+                    } label: {
+                        Label("Automatisch täglich sichern in …", systemImage: "clock.arrow.circlepath")
+                    }
+                }
+                .fileImporter(isPresented: $pickingBackupFolder, allowedContentTypes: [.folder]) { result in
+                    if case .success(let url) = result, AutoBackup.setFolder(url) {
+                        message = AutoBackup.runIfDue(context: context, force: true)
+                            ? "Automatisches Backup eingerichtet – das erste ist schon gespeichert."
+                            : "Ordner gewählt, aber das Backup konnte nicht geschrieben werden."
+                    }
                 }
                 Button {
                     showImporter = true

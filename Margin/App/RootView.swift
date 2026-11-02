@@ -10,6 +10,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var tab: AppTab = .today
     @State private var didLaunch = false
+    @State private var incoming: IncomingFile?
 
     var body: some View {
         TabView(selection: $tab) {
@@ -36,9 +37,26 @@ struct RootView: View {
             AttachmentStore.removeOrphanedFiles(context: context)
         }
         .onChange(of: scenePhase, initial: true) {
-            if scenePhase == .active {
+            switch scenePhase {
+            case .active:
                 Task { await ReminderService.refresh(context: context) }
                 Task { await ConnectorSync.shared.sync(context: context) }
+                Task { await SchoolSync.shared.refreshIfNeeded(context: context) }
+                if UserDefaults.standard.bool(forKey: "intent.startFocus") { tab = .learn }
+            case .background:
+                AutoBackup.runIfDue(context: context)
+                BackgroundRefresh.schedule()
+            default:
+                break
+            }
+        }
+        .onOpenURL { url in
+            incoming = IncomingFile(url: url)
+        }
+        .sheet(item: $incoming) { file in
+            InboxView(file: file) { note in
+                UserDefaults.standard.set(note.uid.uuidString, forKey: "route.openNote")
+                tab = .notes
             }
         }
     }

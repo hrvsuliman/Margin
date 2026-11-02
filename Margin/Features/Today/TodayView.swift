@@ -15,6 +15,7 @@ struct TodayView: View {
     @Query private var topics: [Topic]
     @Query private var cards: [Flashcard]
     @Query private var progress: [TopicProgress]
+    @Query private var entries: [TimetableEntry]
 
     @State private var sheet: EditorSheet?
     @State private var showSettings = false
@@ -56,7 +57,7 @@ struct TodayView: View {
 
     private var agenda: Agenda {
         Agenda(lessons: lessons, exams: exams, tasks: tasks, events: events, holidays: holidays,
-               sessions: sessions, topics: topics, subjects: subjects)
+               sessions: sessions, entries: entries, topics: topics, subjects: subjects)
     }
 
     private func perform(_ action: NextStep.Action) {
@@ -109,6 +110,27 @@ struct TodayView: View {
                     )
                 }
                 .listRowBackground(Color.clear)
+            }
+
+            let changes = (agenda.items(on: now) + agenda.items(on: calendar.addingDays(1, to: now))).filter(\.isChange)
+            if !changes.isEmpty {
+                Section {
+                    ForEach(changes) { item in
+                        Button { sheet = EditorSheet.open(item.source) } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: item.symbol).foregroundStyle(Palette.marginRed)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(item.title) · \(Fmt.relativeDay(item.start, from: now).capitalized) \(Fmt.time(item.start))")
+                                        .foregroundStyle(Palette.ink)
+                                    Text(item.detail).font(.caption).foregroundStyle(Palette.secondaryInk)
+                                }
+                            }
+                        }
+                    }
+                } header: {
+                    SectionTitle("Änderungen", trailing: "WebUntis")
+                }
+                .marginRow()
             }
 
             if let step {

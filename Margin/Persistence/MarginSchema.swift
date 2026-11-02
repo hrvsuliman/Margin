@@ -40,12 +40,12 @@ enum MarginSchemaV3: VersionedSchema {
     }
 }
 
-/// Phase 5: saved tutor conversations.
+/// Phase 5: tutor history, Untis lessons, note pages and recordings.
 enum MarginSchemaV4: VersionedSchema {
     static let versionIdentifier = Schema.Version(4, 0, 0)
 
     static var models: [any PersistentModel.Type] {
-        MarginSchemaV3.models + [ChatThread.self]
+        MarginSchemaV3.models + [ChatThread.self, TimetableEntry.self, NoteMeta.self, NoteAudio.self]
     }
 }
 

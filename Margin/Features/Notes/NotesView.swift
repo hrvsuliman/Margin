@@ -24,6 +24,8 @@ struct NotesView: View {
     @Query private var noteImages: [NoteImage]
 
     @State private var path: [NoteDocument] = []
+    @State private var recording = false
+    @AppStorage("route.openNote") private var routeNote = ""
     @State private var search = ""
     @State private var grouping: Grouping = .recent
     @State private var renaming: NoteDocument?
@@ -120,8 +122,19 @@ struct NotesView: View {
                         Image(systemName: "line.3.horizontal.decrease.circle")
                     }
                     .accessibilityLabel("Ordnen")
-                    Button(action: newNote) {
+                    Menu {
+                        Button(action: newNote) {
+                            Label("Neue Notiz", systemImage: "square.and.pencil")
+                        }
+                        Button {
+                            recording = true
+                        } label: {
+                            Label("Stunde aufnehmen", systemImage: "waveform")
+                        }
+                    } label: {
                         Image(systemName: "square.and.pencil")
+                    } primaryAction: {
+                        newNote()
                     }
                     .accessibilityLabel("Neue Notiz")
                 }
@@ -143,6 +156,14 @@ struct NotesView: View {
                 }
             } message: { note in
                 Text("„\(note.title.isEmpty ? "Ohne Titel" : note.title)“ wird endgültig gelöscht.")
+            }
+            .fullScreenCover(isPresented: $recording) {
+                RecordingView { note in path.append(note) }
+            }
+            .onChange(of: routeNote, initial: true) {
+                guard !routeNote.isEmpty else { return }
+                if let note = notes.first(where: { $0.uid.uuidString == routeNote }) { path.append(note) }
+                routeNote = ""
             }
             .sheet(item: $export) { file in
                 NavigationStack { ExportPreviewView(file: file) }

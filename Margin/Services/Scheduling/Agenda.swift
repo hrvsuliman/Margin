@@ -8,6 +8,7 @@ enum AgendaSource {
     case event(CalendarEvent)
     case holiday(Holiday)
     case session(StudySession)
+    case entry(TimetableEntry)
 }
 
 /// One entry in the calendar or on the Today screen.
@@ -31,7 +32,7 @@ struct AgendaItem: Identifiable {
         case .task: 2
         case .event: 3
         case .session: 4
-        case .lesson: 5
+        case .lesson, .entry: 5
         }
     }
 
@@ -41,7 +42,15 @@ struct AgendaItem: Identifiable {
     }
 
     var isLesson: Bool {
-        if case .lesson = source { return true }
+        switch source {
+        case .lesson, .entry: true
+        default: false
+        }
+    }
+
+    /// A school change (cancellation, substitution) from WebUntis.
+    var isChange: Bool {
+        if case .entry(let entry) = source { return entry.status != .normal }
         return false
     }
 
@@ -74,6 +83,8 @@ struct Agenda {
     var holidays: [Holiday]
     var calendar: Calendar = .school
     var sessions: [StudySession] = []
+    /// Real lessons from WebUntis or a calendar feed; they replace the weekly timetable on their days.
+    var entries: [TimetableEntry] = []
     /// Topic and subject lookups for naming and colouring study sessions.
     var topics: [Topic] = []
     var subjects: [SchoolSubject] = []
@@ -98,6 +109,19 @@ struct Agenda {
                 start: dayStart, end: dayEnd, isAllDay: true,
                 color: Palette.secondaryInk, symbol: "sun.max", isDone: false
             ))
+        } else if case let dayEntries = entries.filter({ calendar.isDate($0.start, inSameDayAs: dayStart) }), !dayEntries.isEmpty {
+            for entry in dayEntries {
+                let subject = entry.subjectUID.flatMap { id in subjects.first { $0.uid == id } }
+                let detail = [entry.status.title, entry.room.isEmpty ? nil : "Raum \(entry.room)", entry.info.isEmpty ? nil : entry.info]
+                    .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+                items.append(AgendaItem(
+                    id: "entry-\(entry.uid)", source: .entry(entry),
+                    title: subject?.name ?? (entry.subjectName.isEmpty ? "Unterricht" : entry.subjectName),
+                    detail: detail, start: entry.start, end: entry.end, isAllDay: false,
+                    color: entry.status == .cancelled ? Palette.faintInk : (subject?.color.color ?? SubjectColor.gray.color),
+                    symbol: entry.status == .cancelled ? "xmark.circle" : "book", isDone: entry.status == .cancelled
+                ))
+            }
         } else {
             let weekday = calendar.isoWeekday(of: dayStart)
             for lesson in lessons where lesson.weekday == weekday {
