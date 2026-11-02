@@ -233,6 +233,13 @@ struct SubjectDetailView: View {
             } label: {
                 Label("Thema hinzufügen", systemImage: "plus")
             }
+            if !subject.rootTopics.isEmpty {
+                Button {
+                    openedNote = StudySheet.create(for: subject.rootTopics, title: subject.name, subject: subject, context: context)
+                } label: {
+                    Label("Lernzettel aus allen Themen", systemImage: "doc.richtext")
+                }
+            }
         } header: {
             SectionTitle("Themen")
         } footer: {

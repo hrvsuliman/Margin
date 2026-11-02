@@ -13,6 +13,9 @@ struct ExamDetailView: View {
     @Query private var allResults: [PracticeResult]
     @Query private var plans: [ExamPlan]
     @Query private var allTopics: [Topic]
+    @Query private var grades: [Grade]
+    @State private var addingGrade = false
+    @Environment(AppSettings.self) private var settings
 
     @State private var editing = false
     @State private var pickingTopics = false
@@ -45,6 +48,9 @@ struct ExamDetailView: View {
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
 
+            if Calendar.school.startOfDay(for: exam.date) <= Calendar.school.startOfDay(for: .now) {
+                gradeSection
+            }
             topicsSection(state.topics)
             planSection
 
@@ -83,6 +89,12 @@ struct ExamDetailView: View {
             NavigationStack { ExamTopicPicker(exam: exam) }
                 .tint(Palette.marginRed)
         }
+        .sheet(isPresented: $addingGrade) {
+            NavigationStack {
+                GradeEditor(grade: nil, subjectUID: exam.subject?.uid, examUID: exam.uid, kind: .written, title: exam.displayTitle)
+            }
+            .tint(Palette.marginRed)
+        }
         .sheet(item: $openedTopic) { topic in
             NavigationStack {
                 List { TopicProgressSection(topicUID: topic.uid) }
@@ -118,6 +130,21 @@ struct ExamDetailView: View {
                     .foregroundStyle(Palette.secondaryInk)
             }
         }
+    }
+
+    private var gradeSection: some View {
+        Section {
+            if let grade = grades.first(where: { $0.examUID == exam.uid }) {
+                LabeledContent("Note", value: settings.gradeScale.label(grade.value))
+            } else {
+                Button {
+                    addingGrade = true
+                } label: {
+                    Label("Note eintragen", systemImage: "chart.bar.doc.horizontal")
+                }
+            }
+        }
+        .marginRow()
     }
 
     // MARK: Topics

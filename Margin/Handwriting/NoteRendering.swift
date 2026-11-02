@@ -21,12 +21,18 @@ enum NoteRendering {
         return [subject, Fmt.date(document.noteDate)].compactMap { $0 }.joined(separator: " · ")
     }
 
-    static func content(for document: NoteDocument, subjects: [SchoolSubject]) -> NoteContent {
-        NoteContent(
+    static func content(for document: NoteDocument, subjects: [SchoolSubject], images: [NoteImage] = []) -> NoteContent {
+        var refs: [UUID: NoteImageRef] = [:]
+        for image in images where image.noteUID == document.uid {
+            refs[image.uid] = NoteImageRef(url: AttachmentStore.directory.appendingPathComponent(image.storedName),
+                                           heightLines: image.heightLines, caption: image.caption)
+        }
+        return NoteContent(
             title: document.title,
             header: header(for: document, subjects: subjects),
             body: document.body,
-            seed: UInt64(bitPattern: Int64(document.seed))
+            seed: UInt64(bitPattern: Int64(document.seed)),
+            images: refs
         )
     }
 
@@ -38,8 +44,9 @@ enum NoteRendering {
     }
 
     /// Renders a document completely and returns the PDF.
-    static func pdf(for document: NoteDocument, subjects: [SchoolSubject], profiles: [HandwritingProfile]) async -> Data {
-        let noteContent = Self.content(for: document, subjects: subjects)
+    static func pdf(for document: NoteDocument, subjects: [SchoolSubject], profiles: [HandwritingProfile],
+                    images: [NoteImage] = []) async -> Data {
+        let noteContent = Self.content(for: document, subjects: subjects, images: images)
         let settings = PageSettings(document: document)
         let source = Self.profile(for: document, in: profiles).map { FontSource(profile: $0) } ?? .empty
         let title = document.title.isEmpty ? "Notiz" : document.title

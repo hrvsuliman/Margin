@@ -23,6 +23,9 @@ enum PageRenderer {
         }
 
         guard let page else { return }
+        for placed in page.images {
+            drawGluedImage(placed, in: context)
+        }
         let ink = UIColor(hex: settings.penColor.hex)
         context.setFillColor(ink.cgColor)
         context.addPath(page.ink)
@@ -41,6 +44,34 @@ enum PageRenderer {
             }
             UIGraphicsPopContext()
         }
+    }
+
+    /// A photo with a white border and two strips of tape.
+    private static func drawGluedImage(_ placed: PlacedImage, in context: CGContext) {
+        let rect = placed.rect
+        context.saveGState()
+        context.translateBy(x: rect.midX, y: rect.midY)
+        context.rotate(by: placed.rotation)
+        let local = CGRect(x: -rect.width / 2, y: -rect.height / 2, width: rect.width, height: rect.height)
+
+        context.setShadow(offset: CGSize(width: 0, height: 1.5), blur: 4, color: UIColor.black.withAlphaComponent(0.22).cgColor)
+        context.setFillColor(UIColor.white.cgColor)
+        context.fill(local.insetBy(dx: -3.5, dy: -3.5))
+        context.setShadow(offset: .zero, blur: 0, color: nil)
+
+        UIGraphicsPushContext(context)
+        UIImage(cgImage: placed.image).draw(in: local)
+        UIGraphicsPopContext()
+
+        context.setFillColor(UIColor(red: 0.95, green: 0.92, blue: 0.78, alpha: 0.72).cgColor)
+        for (x, angle) in [(local.minX + 4, -0.55), (local.maxX - 4, 0.55)] {
+            context.saveGState()
+            context.translateBy(x: x, y: local.minY)
+            context.rotate(by: CGFloat(angle))
+            context.fill(CGRect(x: -11, y: -4.5, width: 22, height: 9))
+            context.restoreGState()
+        }
+        context.restoreGState()
     }
 
     private static func drawPaper(settings: PageSettings, in context: CGContext) {

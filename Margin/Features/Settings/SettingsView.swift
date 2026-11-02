@@ -33,6 +33,9 @@ struct SettingsView: View {
                     LabeledContent("Stundenraster", value: "\(settings.periods.count) Stunden")
                 }
                 NavigationLink("Ferien und freie Tage") { HolidaysView() }
+                Picker("Notenskala", selection: $settings.gradeScale) {
+                    ForEach(GradeScale.allCases) { Text($0.title).tag($0) }
+                }
             } header: {
                 Text("Schule")
             } footer: {
@@ -108,7 +111,7 @@ struct SettingsView: View {
 
             Section("Über Margin") {
                 LabeledContent("Version", value: BuildInfo.current.displayVersion)
-                LabeledContent("Phase", value: "2 · Handschrift")
+                LabeledContent("Phase", value: "3 · Lernen")
             }
             .marginRow()
         }

@@ -175,6 +175,9 @@ enum MarkupStyler {
                 font = headingFont
             } else if line.hasPrefix("- ") || line.hasPrefix("• ") || line.hasPrefix("* ") {
                 markerLength = 2
+            } else if line.hasPrefix(NoteBlock.imagePrefix) {
+                markerLength = range.length
+                font = UIFont.preferredFont(forTextStyle: .caption1)
             }
             if let font {
                 storage.addAttribute(.font, value: font, range: range)

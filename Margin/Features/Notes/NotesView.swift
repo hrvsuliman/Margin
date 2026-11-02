@@ -21,6 +21,7 @@ struct NotesView: View {
     @Query(sort: \SchoolSubject.sortIndex) private var subjects: [SchoolSubject]
     @Query(sort: \HandwritingProfile.createdAt) private var profiles: [HandwritingProfile]
     @Query(sort: \Exam.date) private var exams: [Exam]
+    @Query private var noteImages: [NoteImage]
 
     @State private var path: [NoteDocument] = []
     @State private var search = ""
@@ -280,7 +281,7 @@ struct NotesView: View {
     private func exportPDF(_ note: NoteDocument) {
         exporting = true
         Task {
-            let data = await NoteRendering.pdf(for: note, subjects: subjects, profiles: profiles)
+            let data = await NoteRendering.pdf(for: note, subjects: subjects, profiles: profiles, images: noteImages)
             let title = note.title.isEmpty ? "Notiz" : note.title
             if let url = try? NoteRendering.temporaryPDF(data, title: title) {
                 let pages = PDFPageCounter.count(url)
