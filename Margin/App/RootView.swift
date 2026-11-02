@@ -3,7 +3,7 @@ import SwiftUI
 
 struct RootView: View {
     enum AppTab: Hashable {
-        case today, calendar, subjects, tasks
+        case today, calendar, subjects, tasks, notes
     }
 
     @Environment(\.modelContext) private var context
@@ -25,6 +25,9 @@ struct RootView: View {
             TasksView()
                 .tabItem { Label("Aufgaben", systemImage: "checklist") }
                 .tag(AppTab.tasks)
+            NotesView()
+                .tabItem { Label("Notizen", systemImage: "pencil.and.outline") }
+                .tag(AppTab.notes)
         }
         .onChange(of: tab) { Haptics.selection() }
         .onAppear {
