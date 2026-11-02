@@ -31,7 +31,7 @@ Rules:
 
 One SwiftUI screen, placeholder icon, XcodeGen, GitHub Actions, unsigned `.ipa`, a few unit tests. **Done when** it installs through Sideloadly and the checks in the README pass.
 
-## Phase 1: core app (built, testing)
+## Phase 1: core app ✅ tested on iPhone
 
 - Tab navigation: **Today**, **Calendar**, **Subjects**, **Tasks**, plus **Settings**. Notes and Exams join in Phases 2 and 3.
 - SwiftData models with schema versioning: `Subject`, `Topic` (nested subtopics), `Lesson` (timetable slot, weekly recurrence, A/B weeks optional), `SchoolTask` (type, status, priority, due date, estimate, subtasks, attachments), `CalendarEvent`.
@@ -45,7 +45,19 @@ One SwiftUI screen, placeholder icon, XcodeGen, GitHub Actions, unsigned `.ipa`,
 - Exams exist in a basic form (date, kind, room, reminder) so the dashboard and calendar can show them. Phase 3 extends the same model.
 - Not in Phase 1: drag and drop in the calendar (rescheduling is via edit or long-press), per-occurrence exceptions for recurring events, A/B weeks.
 
-## Phase 2: handwriting studio
+## Phase 2: handwriting studio (built, testing)
+
+**What was built:**
+- Guided capture of all letters (incl. ä ö ü ß), digits and punctuation on guide lines, with finger input sampled at up to 120 Hz. Writing speed is stored per point and turns into natural line width.
+- Strokes are stored as compact vectors, normalised to the guide (baseline 0, x-height 1).
+- Analysis: automatic size and baseline correction, slant, evenness, outlier detection with one-tap fix, letter spacing measured from a written sample word.
+- Multiple versions per character, per-character size/height correction, spacing/slant/variation tuning with live preview, multiple profiles.
+- Renderer: each stroke becomes a filled ink outline (round ends, solid overlaps); text is laid out with word wrap, headings (underlined), subheadings and lists; deterministic variation per word.
+- Note editor with markup, paper styles, pen colours, sizes, margins, page numbers, header; vector PDF export via the share sheet / Files; notes library with search and grouping.
+- Text import: text PDFs (PDFKit), scanned PDFs and photos (Vision OCR, German), TXT/Markdown/RTF.
+- Database version 2 with an automatic migration from Phase 1, backup format 2 (version 1 backups still restore).
+
+**Moved to a later step ("Phase 2b"):** importing handwriting samples from a photo of a printed template sheet, letter-pair ligatures for a joined look, and "AI summary into notes" (needs Phase 4).
 
 This is the hardest and most unusual part, so here's what is and isn't realistic.
 

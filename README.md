@@ -20,8 +20,8 @@ It is built entirely from Windows. You never need a Mac or Xcode on your own com
 | Phase | What | Status |
 |---|---|---|
 | 0 | Build pipeline proof: one screen, icon, CI, unsigned .ipa | ✅ Tested on iPhone |
-| 1 | Navigation, Today screen, subjects, timetable, tasks, exams, calendar, reminders, settings, backup | **Built, waiting for you to test on the iPhone** |
-| 2 | Handwriting studio: capture, profile, rendering, document editor, PDF export | Not started |
+| 1 | Navigation, Today screen, subjects, timetable, tasks, exams, calendar, reminders, settings, backup | ✅ Tested on iPhone |
+| 2 | Handwriting studio: capture, profile, analysis, rendering, note editor, paper styles, PDF export, notes library | **Built, waiting for you to test on the iPhone** |
 | 3 | Exam planner: topics, understanding tracker, roadmap, readiness | Not started |
 | 4 | AI learning assistant | Not started |
 | 5 | Polish | Not started |
@@ -29,6 +29,24 @@ It is built entirely from Windows. You never need a Mac or Xcode on your own com
 Each phase starts only after the previous one builds and you've tested it on your iPhone. The plan and the technical decisions (including how the handwriting will work, honestly) are in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 The app's interface is **German** (dates, Monday-first weeks, German school terms).
+
+### Phase 2: what to check on your iPhone
+
+Install over Phase 1 – your data is migrated to the new database version automatically. To be safe, **save a backup first** (Einstellungen › Backup sichern).
+
+1. **Handschrift einrichten:** tab *Notizen* › *Handschrift einrichten*. Write each character with your finger on the guide lines (solid line = baseline, dashed = top of small letters). At the end write the word "Handschrift" in one go – it measures your letter spacing. Takes ~10 minutes; you can stop with *Fertig* and continue later ("Fehlende Zeichen schreiben").
+2. **Vorschau & Analyse:** the profile shows the pangram in your handwriting, how much the size was corrected, your slant, how even your letters are and which ones stand out. Try *Größe automatisch angleichen* if it lists any.
+3. **Varianten:** *Varianten häufiger Buchstaben schreiben* (e, n, i, s, r …, two more each). Repeated letters then stop looking copied.
+4. **Einzelne Zeichen korrigieren:** tap a character in the grid – adjust size and height, delete a bad version, write another.
+5. **Feinabstimmung:** letter spacing, word spacing, slant and "Natürliche Variation" sliders with live preview.
+6. **Notiz:** *Notizen* › new note. Type or paste text. Use the keyboard bar for headings (`#`), subheadings (`##`) and lists (`-`). Switch to *Handschrift* to see the pages.
+7. **Papier & Stift:** lined / squared / dotted / blank, line spacing, writing size, pen colour and weight, margins, page numbers, subject & date header. Changes show live behind the sheet. *Neu mischen* gives a different natural variation.
+8. **Text bearbeiten:** go back to *Text*, change a word – the pages are re-rendered, nothing is lost.
+9. **Import:** the ↓ button: a PDF with text, a scanned PDF or a photo of a worksheet (text recognition on the iPhone, German), a .txt / .rtf file, or the clipboard.
+10. **PDF:** *PDF* shows the preview; *Teilen oder sichern* saves it to the Files app or shares it. Check it prints at A4.
+11. **Bibliothek:** search, sort by subject / folder / exam, long-press to rename, duplicate, export or delete. Subject pages now list their notes too.
+
+Honest limits of this version: letters are placed one by one (no joined-up cursive yet); characters you haven't written appear in a visibly different fallback font; importing handwriting from a photo of a page is not in this phase (see the roadmap).
 
 ### Phase 1: what to check on your iPhone
 
@@ -187,9 +205,10 @@ Margin/
 │  ├─ DesignSystem/            Colours, rows, shared UI pieces
 │  ├─ Models/                  SwiftData models (subjects, lessons, tasks, exams …)
 │  ├─ Persistence/             Database setup + migrations, attachments, backup
-│  ├─ Services/                Calendar maths, timetable, reminders (no UI)
+│  ├─ Services/                Calendar maths, timetable, reminders, text import (no UI)
+│  ├─ Handwriting/             Stroke storage, analysis, ink outlines, font, page layout, PDF
 │  ├─ Settings/                User preferences (school type, bell schedule …)
-│  ├─ Features/                One folder per area: Today, Calendar, Subjects, Tasks, Exams, Settings
+│  ├─ Features/                One folder per area: Today, Calendar, Subjects, Tasks, Exams, Notes, Handwriting, Settings
 │  ├─ Support/                 German dates and formatting, build info
 │  └─ Resources/Assets.xcassets  App icon
 ├─ MarginTests/                Unit tests (run on a simulator in CI)

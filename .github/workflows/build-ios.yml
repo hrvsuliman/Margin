@@ -116,18 +116,41 @@ jobs:
       - name: Pick an iPhone simulator
         id: simulator
         run: |
-          xcodebuild -project Margin.xcodeproj -scheme Margin -showdestinations > destinations.txt 2>&1 || true
-          ID=$(sed '/Ineligible/q' destinations.txt \
-            | grep "platform:iOS Simulator" \
-            | grep "name:iPhone" \
-            | head -1 \
-            | sed -E 's/.*id:([^,]+),.*/\1/')
+          # The simulator service sometimes needs a moment after boot, so try a few times.
+          ID=""
+          for attempt in 1 2 3; do
+            xcrun simctl list devices > /dev/null 2>&1 || true
+            xcodebuild -project Margin.xcodeproj -scheme Margin -showdestinations > destinations.txt 2>&1 || true
+            ID=$(sed '/Ineligible/q' destinations.txt \
+              | grep "platform:iOS Simulator" \
+              | grep "name:iPhone" \
+              | head -1 \
+              | sed -E 's/.*id:([^,]+),.*/\1/')
+            [ -n "$ID" ] && break
+            echo "No iPhone simulator listed yet (attempt $attempt), waiting …"
+            sleep 20
+          done
+          if [ -z "$ID" ]; then
+            # Fall back to the simulator list, preferring the runtime that matches the SDK.
+            SDK=$(xcrun --sdk iphonesimulator --show-sdk-version | cut -d. -f1-2 | tr . -)
+            ID=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          sdk = sys.argv[1]
+          devices = json.load(sys.stdin)["devices"]
+          runtimes = sorted(devices, key=lambda r: (sdk not in r, r))
+          for runtime in runtimes:
+              if "iOS" in runtime:
+                  for device in devices[runtime]:
+                      if device["name"].startswith("iPhone"):
+                          print(device["udid"]); sys.exit()
+          ' "$SDK")
+          fi
           if [ -z "$ID" ]; then
             cat destinations.txt
             echo "::error::No iPhone simulator found on this runner"
             exit 1
           fi
-          grep -m1 "$ID" destinations.txt
+          echo "Using simulator $ID"
           echo "id=${ID}" >> "$GITHUB_OUTPUT"
 
       - name: Run unit tests

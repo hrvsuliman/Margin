@@ -65,6 +65,17 @@ struct SettingsView: View {
             }
             .marginRow()
 
+            Section {
+                NavigationLink {
+                    ProfilesView()
+                } label: {
+                    Label("Handschrift", systemImage: "signature")
+                }
+            } footer: {
+                Text("Deine Schriftproben bleiben auf diesem iPhone.")
+            }
+            .marginRow()
+
             Section("Darstellung") {
                 Picker("Erscheinungsbild", selection: $settings.appearance) {
                     ForEach(Appearance.allCases) { Text($0.title).tag($0) }
@@ -91,13 +102,13 @@ struct SettingsView: View {
             } header: {
                 Text("Daten")
             } footer: {
-                Text("Alles bleibt auf diesem iPhone. Sichere regelmäßig ein Backup in der Dateien-App: Wenn du Margin löschst, sind auch die Daten weg.")
+                Text("Alles bleibt auf diesem iPhone – auch deine Handschrift und Notizen. Sichere regelmäßig ein Backup in der Dateien-App: Wenn du Margin löschst, sind auch die Daten weg.")
             }
             .marginRow()
 
             Section("Über Margin") {
                 LabeledContent("Version", value: BuildInfo.current.displayVersion)
-                LabeledContent("Phase", value: "1 · Planer")
+                LabeledContent("Phase", value: "2 · Handschrift")
             }
             .marginRow()
         }
@@ -144,7 +155,7 @@ struct SettingsView: View {
                 message = "Alle Daten wurden gelöscht."
             }
         } message: {
-            Text("Fächer, Stundenplan, Aufgaben, Prüfungen, Termine und Anhänge werden endgültig gelöscht. Sichere vorher ein Backup.")
+            Text("Fächer, Stundenplan, Aufgaben, Prüfungen, Termine, Anhänge, Notizen und Handschriften werden endgültig gelöscht. Sichere vorher ein Backup.")
         }
         .alert("Margin", isPresented: messageBinding) {
             Button("OK", role: .cancel) {}

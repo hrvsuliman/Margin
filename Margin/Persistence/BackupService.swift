@@ -9,7 +9,8 @@ struct BackupFile: Codable {
     static let formatName = "margin-backup"
 
     var format: String = BackupFile.formatName
-    var version: Int = 1
+    /// 1 = Phase 1, 2 = adds handwriting and notes.
+    var version: Int = 2
     var exportedAt: Date = .now
     var appVersion: String = ""
     var settings: SettingsSnapshot?
@@ -22,6 +23,10 @@ struct BackupFile: Codable {
     var events: [EventDTO] = []
     var attachments: [AttachmentDTO] = []
     var holidays: [HolidayDTO] = []
+    // Optional so that version 1 backups (without them) still load.
+    var profiles: [ProfileDTO]?
+    var glyphs: [GlyphDTO]?
+    var notes: [NoteDTO]?
 
     struct SubjectDTO: Codable {
         var uid: UUID; var name: String; var colorKey: String; var teacher: String; var room: String
@@ -60,6 +65,23 @@ struct BackupFile: Codable {
     }
     struct HolidayDTO: Codable {
         var uid: UUID; var name: String; var start: Date; var end: Date
+    }
+    struct ProfileDTO: Codable {
+        var uid: UUID; var name: String; var isDefault: Bool; var createdAt: Date
+        var letterSpacing: Double; var wordSpacing: Double; var slantAdjust: Double; var variation: Double
+        var spacingMeasured: Bool
+    }
+    struct GlyphDTO: Codable {
+        var uid: UUID; var character: String; var strokes: Data; var createdAt: Date
+        var scale: Double; var baselineOffset: Double; var profile: UUID?
+    }
+    struct NoteDTO: Codable {
+        var uid: UUID; var title: String; var body: String; var folder: String; var noteDate: Date
+        var createdAt: Date; var updatedAt: Date
+        var subject: UUID?; var topic: UUID?; var exam: UUID?; var profile: UUID?
+        var paper: String; var lineSpacingMM: Double; var writingSize: Double; var penColor: String; var penWeight: Double
+        var marginTopMM: Double; var marginBottomMM: Double; var marginLeftMM: Double; var marginRightMM: Double
+        var showMarginLine: Bool; var showPageNumbers: Bool; var showHeader: Bool; var printPaper: Bool; var seed: Int
     }
 }
 
@@ -144,6 +166,28 @@ enum BackupService {
         file.holidays = all(Holiday.self, context).map {
             BackupFile.HolidayDTO(uid: $0.uid, name: $0.name, start: $0.start, end: $0.end)
         }
+        file.profiles = all(HandwritingProfile.self, context).map {
+            BackupFile.ProfileDTO(uid: $0.uid, name: $0.name, isDefault: $0.isDefault, createdAt: $0.createdAt,
+                                  letterSpacing: $0.letterSpacing, wordSpacing: $0.wordSpacing,
+                                  slantAdjust: $0.slantAdjust, variation: $0.variation, spacingMeasured: $0.spacingMeasured)
+        }
+        file.glyphs = all(GlyphSample.self, context).map {
+            BackupFile.GlyphDTO(uid: $0.uid, character: $0.character, strokes: $0.strokeData, createdAt: $0.createdAt,
+                                scale: $0.scale, baselineOffset: $0.baselineOffset, profile: $0.profile?.uid)
+        }
+        file.notes = all(NoteDocument.self, context).map { note in
+            BackupFile.NoteDTO(
+                uid: note.uid, title: note.title, body: note.body, folder: note.folder, noteDate: note.noteDate,
+                createdAt: note.createdAt, updatedAt: note.updatedAt,
+                subject: note.subjectUID, topic: note.topicUID, exam: note.examUID, profile: note.profileUID,
+                paper: note.paperRaw, lineSpacingMM: note.lineSpacingMM, writingSize: note.writingSize,
+                penColor: note.penColorRaw, penWeight: note.penWeight,
+                marginTopMM: note.marginTopMM, marginBottomMM: note.marginBottomMM,
+                marginLeftMM: note.marginLeftMM, marginRightMM: note.marginRightMM,
+                showMarginLine: note.showMarginLine, showPageNumbers: note.showPageNumbers,
+                showHeader: note.showHeader, printPaper: note.printPaper, seed: note.seed
+            )
+        }
 
         return try encoder.encode(file)
     }
@@ -154,7 +198,7 @@ enum BackupService {
               file.format == BackupFile.formatName else {
             throw BackupError.notABackup
         }
-        guard file.version <= 1 else { throw BackupError.newerVersion }
+        guard file.version <= 2 else { throw BackupError.newerVersion }
         return file
     }
 
@@ -270,13 +314,67 @@ enum BackupService {
             context.insert(holiday)
         }
 
+        var profiles: [UUID: HandwritingProfile] = [:]
+        for dto in file.profiles ?? [] {
+            let profile = HandwritingProfile(name: dto.name)
+            profile.uid = dto.uid
+            profile.isDefault = dto.isDefault
+            profile.createdAt = dto.createdAt
+            profile.letterSpacing = dto.letterSpacing
+            profile.wordSpacing = dto.wordSpacing
+            profile.slantAdjust = dto.slantAdjust
+            profile.variation = dto.variation
+            profile.spacingMeasured = dto.spacingMeasured
+            context.insert(profile)
+            profiles[dto.uid] = profile
+        }
+
+        for dto in file.glyphs ?? [] {
+            let glyph = GlyphSample(character: dto.character, strokeData: dto.strokes)
+            glyph.uid = dto.uid
+            glyph.createdAt = dto.createdAt
+            glyph.scale = dto.scale
+            glyph.baselineOffset = dto.baselineOffset
+            context.insert(glyph)
+            glyph.profile = dto.profile.flatMap { profiles[$0] }
+        }
+
+        for dto in file.notes ?? [] {
+            let note = NoteDocument(title: dto.title)
+            note.uid = dto.uid
+            note.body = dto.body
+            note.folder = dto.folder
+            note.noteDate = dto.noteDate
+            note.createdAt = dto.createdAt
+            note.updatedAt = dto.updatedAt
+            note.subjectUID = dto.subject
+            note.topicUID = dto.topic
+            note.examUID = dto.exam
+            note.profileUID = dto.profile
+            note.paperRaw = dto.paper
+            note.lineSpacingMM = dto.lineSpacingMM
+            note.writingSize = dto.writingSize
+            note.penColorRaw = dto.penColor
+            note.penWeight = dto.penWeight
+            note.marginTopMM = dto.marginTopMM
+            note.marginBottomMM = dto.marginBottomMM
+            note.marginLeftMM = dto.marginLeftMM
+            note.marginRightMM = dto.marginRightMM
+            note.showMarginLine = dto.showMarginLine
+            note.showPageNumbers = dto.showPageNumbers
+            note.showHeader = dto.showHeader
+            note.printPaper = dto.printPaper
+            note.seed = dto.seed
+            context.insert(note)
+        }
+
         if let settings, let snapshot = file.settings {
             snapshot.apply(to: settings)
         }
         context.commit()
     }
 
-    /// Deletes all school data and attachment files. Settings stay.
+    /// Deletes all school data, notes, handwriting and attachment files. Settings stay.
     static func deleteEverything(context: ModelContext) {
         all(Subtask.self, context).forEach { context.delete($0) }
         all(Attachment.self, context).forEach { context.delete($0) }
@@ -287,6 +385,9 @@ enum BackupService {
         all(CalendarEvent.self, context).forEach { context.delete($0) }
         all(Holiday.self, context).forEach { context.delete($0) }
         all(SchoolSubject.self, context).forEach { context.delete($0) }
+        all(GlyphSample.self, context).forEach { context.delete($0) }
+        all(HandwritingProfile.self, context).forEach { context.delete($0) }
+        all(NoteDocument.self, context).forEach { context.delete($0) }
         try? context.save()
         AttachmentStore.removeAllFiles()
     }

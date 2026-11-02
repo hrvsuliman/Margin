@@ -12,6 +12,10 @@ struct SubjectDetailView: View {
     @State private var newTopicTitle = ""
     @State private var confirmDelete = false
     @State private var showPastExams = false
+    @State private var openedNote: NoteDocument?
+    @Query(sort: \NoteDocument.updatedAt, order: .reverse) private var allNotes: [NoteDocument]
+
+    private var notes: [NoteDocument] { allNotes.filter { $0.subjectUID == subject.uid } }
 
     private var today: Date { Calendar.school.startOfDay(for: .now) }
     private var upcomingExams: [Exam] {
@@ -37,6 +41,7 @@ struct SubjectDetailView: View {
             examsSection
             tasksSection
             topicsSection
+            notesSection
 
             AttachmentsSection(owner: .subject(subject), title: "Materialien")
                 .marginRow()
@@ -62,6 +67,9 @@ struct SubjectDetailView: View {
             }
         }
         .editorSheet($sheet)
+        .navigationDestination(item: $openedNote) { note in
+            NoteEditorView(document: note)
+        }
         .alert("Neues Thema", isPresented: $addingTopic) {
             TextField("z. B. Ableitungen", text: $newTopicTitle)
             Button("Hinzufügen", action: addTopic)
@@ -231,6 +239,37 @@ struct SubjectDetailView: View {
             if subject.rootTopics.isEmpty {
                 Text("Themen gliedern den Stoff, z. B. Algebra › Funktionen › Ableitungen. In Phase 3 bekommt jedes Thema einen Lernstand.")
             }
+        }
+        .marginRow()
+    }
+
+    private var notesSection: some View {
+        Section {
+            ForEach(notes) { note in
+                Button {
+                    openedNote = note
+                } label: {
+                    HStack {
+                        Text(note.title.isEmpty ? "Ohne Titel" : note.title)
+                            .foregroundStyle(Palette.ink)
+                        Spacer()
+                        Text(Fmt.date(note.noteDate))
+                            .font(.caption)
+                            .foregroundStyle(Palette.secondaryInk)
+                    }
+                }
+            }
+            Button {
+                let note = NoteDocument(title: "")
+                note.subjectUID = subject.uid
+                context.insert(note)
+                try? context.save()
+                openedNote = note
+            } label: {
+                Label("Notiz anlegen", systemImage: "square.and.pencil")
+            }
+        } header: {
+            SectionTitle("Notizen", trailing: notes.isEmpty ? nil : "\(notes.count)")
         }
         .marginRow()
     }
