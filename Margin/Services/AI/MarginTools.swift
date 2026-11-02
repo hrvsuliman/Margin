@@ -170,7 +170,7 @@ enum MarginTools {
 
     // MARK: Helpers
 
-    static func json(_ value: Any) -> String {
+    nonisolated static func json(_ value: Any) -> String {
         guard JSONSerialization.isValidJSONObject(value),
               let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .withoutEscapingSlashes]) else {
             return String(describing: value)
