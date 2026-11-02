@@ -338,6 +338,7 @@ struct NoteEditorView: View {
     }
 
     private func saveThumbnail() {
+        LearningStore.syncCards(for: document, context: context)
         if let first = pages.first {
             document.thumbnail = PageRenderer.thumbnail(of: first, settings: renderedSettings, width: 120)
                 .jpegData(compressionQuality: 0.75)

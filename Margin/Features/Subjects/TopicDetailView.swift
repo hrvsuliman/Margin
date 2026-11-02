@@ -26,6 +26,8 @@ struct TopicDetailView: View {
             }
             .marginRow()
 
+            TopicProgressSection(topicUID: topic.uid)
+
             Section("Notizen") {
                 TextField("Definitionen, Formeln, offene Fragen …", text: $topic.details, axis: .vertical)
                     .lineLimit(4...30)

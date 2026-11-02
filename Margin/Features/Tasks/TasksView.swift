@@ -10,6 +10,7 @@ struct TasksView: View {
     @State private var subjectFilter: SchoolSubject?
     @State private var sheet: EditorSheet?
     @State private var pendingDelete: SchoolTask?
+    @Binding var plannerMode: String
 
     enum Filter: String, CaseIterable, Identifiable {
         case open, overdue, done
@@ -46,12 +47,16 @@ struct TasksView: View {
             .marginList()
             .animation(.spring(response: 0.4, dampingFraction: 0.85), value: filter)
             .navigationTitle("Aufgaben")
+            .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: SchoolTask.self) { task in
                 TaskDetailView(task: task)
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     subjectMenu
+                }
+                ToolbarItem(placement: .principal) {
+                    PlannerSwitch(mode: $plannerMode)
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button {

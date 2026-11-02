@@ -27,18 +27,34 @@ enum MarginSchemaV2: VersionedSchema {
     }
 }
 
+/// Phase 3: learning (topics' understanding, plans, sessions, flashcards),
+/// grades and images in notes.
+enum MarginSchemaV3: VersionedSchema {
+    static let versionIdentifier = Schema.Version(3, 0, 0)
+
+    static var models: [any PersistentModel.Type] {
+        MarginSchemaV2.models + [
+            TopicProgress.self, UnderstandingEvent.self, ExamPlan.self, StudySession.self,
+            Flashcard.self, PracticeResult.self, Grade.self, GradeSetup.self, NoteImage.self,
+        ]
+    }
+}
+
 enum MarginMigrationPlan: SchemaMigrationPlan {
-    static var schemas: [any VersionedSchema.Type] { [MarginSchemaV1.self, MarginSchemaV2.self] }
+    static var schemas: [any VersionedSchema.Type] { [MarginSchemaV1.self, MarginSchemaV2.self, MarginSchemaV3.self] }
 
     static var stages: [MigrationStage] {
-        // Only new tables were added, so SwiftData can migrate automatically.
-        [.lightweight(fromVersion: MarginSchemaV1.self, toVersion: MarginSchemaV2.self)]
+        // Each version only added new tables, so SwiftData can migrate automatically.
+        [
+            .lightweight(fromVersion: MarginSchemaV1.self, toVersion: MarginSchemaV2.self),
+            .lightweight(fromVersion: MarginSchemaV2.self, toVersion: MarginSchemaV3.self),
+        ]
     }
 }
 
 @MainActor
 enum Persistence {
-    static let schema = Schema(versionedSchema: MarginSchemaV2.self)
+    static let schema = Schema(versionedSchema: MarginSchemaV3.self)
 
     /// The app's database, stored on the device only.
     static let container: ModelContainer = {

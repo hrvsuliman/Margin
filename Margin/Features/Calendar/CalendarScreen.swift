@@ -19,13 +19,18 @@ struct CalendarScreen: View {
     @Query private var tasks: [SchoolTask]
     @Query private var events: [CalendarEvent]
     @Query private var holidays: [Holiday]
+    @Query private var sessions: [StudySession]
+    @Query private var topics: [Topic]
+    @Query private var subjects: [SchoolSubject]
+    @Binding var plannerMode: String
 
     @State private var mode: Mode = .month
     @State private var selected = Calendar.school.startOfDay(for: .now)
     @State private var sheet: EditorSheet?
 
     private var agenda: Agenda {
-        Agenda(lessons: lessons, exams: exams, tasks: tasks, events: events, holidays: holidays)
+        Agenda(lessons: lessons, exams: exams, tasks: tasks, events: events, holidays: holidays,
+               sessions: sessions, topics: topics, subjects: subjects)
     }
 
     var body: some View {
@@ -54,6 +59,9 @@ struct CalendarScreen: View {
             .navigationTitle("Kalender")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    PlannerSwitch(mode: $plannerMode)
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Heute") {
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
@@ -99,7 +107,7 @@ struct CalendarScreen: View {
 enum Reschedule {
     static func canShift(_ source: AgendaSource) -> Bool {
         switch source {
-        case .task, .exam: true
+        case .task, .exam, .session: true
         case .event(let event): event.recurrence == .never
         case .lesson, .holiday: false
         }
@@ -117,6 +125,8 @@ enum Reschedule {
         case .event(let event):
             event.start = calendar.addingDays(days, to: event.start)
             event.end = calendar.addingDays(days, to: event.end)
+        case .session(let session):
+            session.date = calendar.addingDays(days, to: session.date)
         case .lesson, .holiday:
             return
         }

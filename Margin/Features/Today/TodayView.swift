@@ -11,9 +11,15 @@ struct TodayView: View {
     @Query private var tasks: [SchoolTask]
     @Query private var events: [CalendarEvent]
     @Query private var holidays: [Holiday]
+    @Query private var sessions: [StudySession]
+    @Query private var topics: [Topic]
+    @Query private var cards: [Flashcard]
+    @Query private var progress: [TopicProgress]
 
     @State private var sheet: EditorSheet?
     @State private var showSettings = false
+    @State private var focus: FocusRequest?
+    @State private var review: ReviewRequest?
 
     var body: some View {
         NavigationStack {
@@ -43,11 +49,28 @@ struct TodayView: View {
                 NavigationStack { SettingsView() }
                     .tint(Palette.marginRed)
             }
+            .fullScreenCover(item: $focus) { FocusView(request: $0) }
+            .fullScreenCover(item: $review) { FlashcardReviewView(cards: $0.cards) }
         }
     }
 
     private var agenda: Agenda {
-        Agenda(lessons: lessons, exams: exams, tasks: tasks, events: events, holidays: holidays)
+        Agenda(lessons: lessons, exams: exams, tasks: tasks, events: events, holidays: holidays,
+               sessions: sessions, topics: topics, subjects: subjects)
+    }
+
+    private func perform(_ action: NextStep.Action) {
+        switch action {
+        case .session(let session):
+            focus = FocusRequest(topicUID: session.topicUID, subjectUID: session.subjectUID, examUID: session.examUID,
+                                 minutes: session.plannedMinutes, session: session)
+        case let .focus(topicUID, subjectUID, minutes):
+            focus = FocusRequest(topicUID: topicUID, subjectUID: subjectUID, examUID: nil, minutes: minutes, session: nil)
+        case .cards:
+            review = ReviewRequest(cards: cards.filter { $0.due <= .now }.sorted { $0.due < $1.due })
+        case .exam(let exam):
+            sheet = .exam(exam)
+        }
     }
 
     // MARK: Content
@@ -58,6 +81,10 @@ struct TodayView: View {
         let holiday = agenda.holiday(on: now)
         let todayLessons = todayItems.filter(\.isLesson)
         let todayEvents = todayItems.filter { if case .event = $0.source { return true } else { return false } }
+        let todaySessions = todayItems.filter(\.isSession)
+        let dueCardCount = cards.filter { $0.due <= now }.count
+        let _ = progress.count
+        let step = subjects.isEmpty ? nil : LearningStore.nextStep(context, now: now)
         let due = dueTasks(now: now)
         let upcomingExams = exams.filter {
             $0.date >= calendar.startOfDay(for: now) && calendar.daysBetween(now, $0.date) <= 28
@@ -82,6 +109,13 @@ struct TodayView: View {
                     )
                 }
                 .listRowBackground(Color.clear)
+            }
+
+            if let step {
+                Section {
+                    NextStepCard(step: step) { perform(step.action) }
+                }
+                .marginRow()
             }
 
             if let next {
@@ -113,6 +147,25 @@ struct TodayView: View {
                     }
                 } header: {
                     SectionTitle("Fällig", trailing: "bis morgen")
+                }
+                .marginRow()
+            }
+
+            if !todaySessions.isEmpty || dueCardCount > 0 {
+                Section {
+                    ForEach(todaySessions) { item in
+                        Button { sheet = EditorSheet.open(item.source) } label: { AgendaRow(item: item, now: now) }
+                    }
+                    if dueCardCount > 0 {
+                        Button {
+                            review = ReviewRequest(cards: cards.filter { $0.due <= now }.sorted { $0.due < $1.due })
+                        } label: {
+                            Label("\(dueCardCount) Karteikarte\(dueCardCount == 1 ? "" : "n") fällig", systemImage: "rectangle.on.rectangle.angled")
+                                .foregroundStyle(Palette.ink)
+                        }
+                    }
+                } header: {
+                    SectionTitle("Lernen heute")
                 }
                 .marginRow()
             }
@@ -238,8 +291,7 @@ struct TodayView: View {
 
     private func examRow(_ exam: Exam, now: Date) -> some View {
         HStack(spacing: 12) {
-            MarginBar(color: exam.subject?.color.color ?? Palette.marginRed)
-                .frame(height: 34)
+            ReadinessRing(value: LearningStore.readiness(for: exam, context: context, now: now).overall, size: 36, lineWidth: 3.5)
             VStack(alignment: .leading, spacing: 2) {
                 Text(exam.displayTitle).foregroundStyle(Palette.ink)
                 Text(Fmt.longDay(exam.date))

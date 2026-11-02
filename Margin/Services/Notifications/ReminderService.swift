@@ -44,7 +44,11 @@ enum ReminderService {
             status = await authorizationStatus()
         }
 
-        center.removeAllPendingNotificationRequests()
+        // Only replace our own reminders (the focus timer schedules its own).
+        let ours = await center.pendingNotificationRequests().map(\.identifier).filter {
+            $0.hasPrefix("task-") || $0.hasPrefix("exam-") || $0.hasPrefix("event-") || $0.hasPrefix("session-")
+        }
+        center.removePendingNotificationRequests(withIdentifiers: ours)
         guard status == .authorized || status == .provisional || status == .ephemeral else { return }
 
         for reminder in planned {
