@@ -20,9 +20,9 @@ final class HandwritingFont: @unchecked Sendable {
     let variation: CGFloat
     /// Pen width relative to the x-height.
     let penRatio: CGFloat
-    private let variants: [Character: [Variant]]
+    private let table: [Character: [Variant]]
 
-    var isEmpty: Bool { variants.isEmpty }
+    var isEmpty: Bool { table.isEmpty }
 
     init(source: FontSource, penRatio: CGFloat) {
         let analysis = HandwritingAnalysis.analyze(source.glyphs)
@@ -40,15 +40,15 @@ final class HandwritingFont: @unchecked Sendable {
             if !list.isEmpty { built[character] = list }
         }
         Self.addComposites(to: &built, penRatio: penRatio)
-        variants = built
+        table = built
     }
 
     func variants(for character: Character) -> [Variant]? {
-        variants[character]
+        table[character]
     }
 
     func has(_ character: Character) -> Bool {
-        variants[character] != nil
+        table[character] != nil
     }
 
     // MARK: Building

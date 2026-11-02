@@ -86,8 +86,7 @@ enum TextImport {
                 do {
                     try VNImageRequestHandler(cgImage: image).perform([request])
                     let lines = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
-                    continuation.resume(returning: lines.joined(separator: "
-"))
+                    continuation.resume(returning: lines.joined(separator: "\n"))
                 } catch {
                     continuation.resume(throwing: error)
                 }

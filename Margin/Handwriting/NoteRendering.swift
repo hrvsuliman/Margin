@@ -39,13 +39,13 @@ enum NoteRendering {
 
     /// Renders a document completely and returns the PDF.
     static func pdf(for document: NoteDocument, subjects: [SchoolSubject], profiles: [HandwritingProfile]) async -> Data {
-        let content = content(for: document, subjects: subjects)
+        let noteContent = Self.content(for: document, subjects: subjects)
         let settings = PageSettings(document: document)
-        let source = profile(for: document, in: profiles).map { FontSource(profile: $0) } ?? .empty
+        let source = Self.profile(for: document, in: profiles).map { FontSource(profile: $0) } ?? .empty
         let title = document.title.isEmpty ? "Notiz" : document.title
         return await Task.detached(priority: .userInitiated) {
             let font = HandwritingFont(source: source, penRatio: settings.penRatio)
-            let pages = NoteLayout.layout(content, settings: settings, font: font)
+            let pages = NoteLayout.layout(noteContent, settings: settings, font: font)
             return PageRenderer.pdf(pages: pages, settings: settings, title: title)
         }.value
     }
