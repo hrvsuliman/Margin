@@ -16,7 +16,7 @@ settings:
   base:
     # Bump MARKETING_VERSION when a phase ships. CI overrides
     # CURRENT_PROJECT_VERSION with the GitHub Actions run number.
-    MARKETING_VERSION: "0.4.0"
+    MARKETING_VERSION: "0.5.0"
     CURRENT_PROJECT_VERSION: "1"
     # Swift 6 compiler, Swift 5 language mode (avoids strict-concurrency errors).
     SWIFT_VERSION: "5.0"
@@ -29,15 +29,21 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hrvsuliman.margin
-        TARGETED_DEVICE_FAMILY: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: YES
+        # Extra keys (document types, background modes) merged into the generated plist.
+        INFOPLIST_FILE: Config/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: Margin
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Für Aufnahmen von Unterrichtsstunden, die Margin auf dem iPhone in Text umwandelt."
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Damit Margin deine Aufnahmen auf dem iPhone in Text umwandeln kann."
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Damit Claude auf deinem PC (Claude Code oder Claude Desktop) im selben WLAN auf Margin zugreifen kann – nur wenn du „Claude verbinden“ einschaltest."
-        INFOPLIST_KEY_NSCameraUsageDescription: "Margin nutzt die Kamera, um deine ausgefüllte Handschrift-Vorlage einzuscannen. Die Bilder bleiben auf dem iPhone."
+        INFOPLIST_KEY_NSCameraUsageDescription: "Margin nutzt die Kamera für Fotos von Tafel, Arbeitsblättern und deiner Handschrift-Vorlage. Die Bilder bleiben auf dem iPhone."
+        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "Damit du Seiten deiner Notizen als Bilder in Fotos sichern kannst."
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: YES
     scheme:

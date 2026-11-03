@@ -1,3 +1,4 @@
+import AVFoundation
 import PDFKit
 import SwiftData
 import SwiftUI
@@ -103,6 +104,7 @@ struct NoteDetailsView: View {
     @Query(sort: \Exam.date) private var exams: [Exam]
     @Query(sort: \HandwritingProfile.createdAt) private var profiles: [HandwritingProfile]
     @Query private var notes: [NoteDocument]
+    @Query private var recordings: [NoteAudio]
 
     private var subject: SchoolSubject? {
         document.subjectUID.flatMap { uid in subjects.first { $0.uid == uid } }
@@ -163,6 +165,17 @@ struct NoteDetailsView: View {
                 Text("Ordner")
             }
             .marginRow()
+
+            let audio = recordings.filter { $0.noteUID == document.uid }
+            if !audio.isEmpty {
+                Section("Aufnahme") {
+                    ForEach(audio) { recording in
+                        AudioPlayerRow(url: AttachmentStore.directory.appendingPathComponent(recording.storedName),
+                                       duration: recording.duration)
+                    }
+                }
+                .marginRow()
+            }
 
             Section {
                 Picker("Handschrift", selection: $document.profileUID) {
@@ -256,6 +269,48 @@ struct NoteImagesView: View {
     }
 }
 
+/// Pages rendered as images.
+struct ImageExport: Identifiable {
+    let id = UUID()
+    let urls: [URL]
+    let title: String
+}
+
+struct ImageExportView: View {
+    @Environment(\.dismiss) private var dismiss
+    let export: ImageExport
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                ForEach(export.urls, id: \.self) { url in
+                    if let image = UIImage(contentsOfFile: url.path) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                            .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+                    }
+                }
+            }
+            .padding(16)
+        }
+        .background(Palette.paper)
+        .navigationTitle(export.urls.count == 1 ? "Bild" : "\(export.urls.count) Bilder")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Schließen") { dismiss() }
+            }
+            ToolbarItem(placement: .primaryAction) {
+                ShareLink(items: export.urls) {
+                    Label("Teilen oder in Fotos sichern", systemImage: "square.and.arrow.up")
+                }
+            }
+        }
+    }
+}
+
 /// A finished PDF, ready to look at and share.
 struct ExportFile: Identifiable {
     let id = UUID()
@@ -309,5 +364,49 @@ struct PDFKitView: UIViewRepresentable {
         if view.document?.documentURL != url {
             view.document = PDFDocument(url: url)
         }
+    }
+}
+
+
+/// Plays a recorded lesson.
+struct AudioPlayerRow: View {
+    let url: URL
+    let duration: Double
+    @State private var player: AVAudioPlayer?
+    @State private var playing = false
+
+    var body: some View {
+        HStack {
+            Button {
+                toggle()
+            } label: {
+                Image(systemName: playing ? "pause.circle.fill" : "play.circle.fill")
+                    .font(.title)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(playing ? "Pause" : "Abspielen")
+            Text(RecordingView.clock(duration))
+                .monospacedDigit()
+                .foregroundStyle(Palette.secondaryInk)
+            Spacer()
+            ShareLink(item: url) {
+                Image(systemName: "square.and.arrow.up")
+            }
+        }
+        .onDisappear { player?.stop() }
+    }
+
+    private func toggle() {
+        if playing {
+            player?.pause()
+            playing = false
+            return
+        }
+        if player == nil {
+            try? AVAudioSession.sharedInstance().setCategory(.playback)
+            player = try? AVAudioPlayer(contentsOf: url)
+        }
+        player?.play()
+        playing = player?.isPlaying ?? false
     }
 }

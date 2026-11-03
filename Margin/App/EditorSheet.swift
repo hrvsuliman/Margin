@@ -16,6 +16,7 @@ enum EditorSheet: Identifiable {
     case subjectTemplates
     case holiday(Holiday?)
     case session(StudySession)
+    case entry(TimetableEntry)
 
     // Stable ids: an id that changed on every access would make the sheet flicker.
     var id: String {
@@ -33,6 +34,7 @@ enum EditorSheet: Identifiable {
         case .subjectTemplates: "subject-templates"
         case .holiday(let holiday): "holiday-\(holiday?.uid.uuidString ?? "new")"
         case .session(let session): "session-\(session.uid)"
+        case .entry(let entry): "entry-\(entry.uid)"
         }
     }
 
@@ -44,6 +46,7 @@ enum EditorSheet: Identifiable {
         case .event(let event): .event(event)
         case .holiday(let holiday): .holiday(holiday)
         case .session(let session): .session(session)
+        case .entry(let entry): .entry(entry)
         }
     }
 }
@@ -88,6 +91,8 @@ struct EditorSheetView: View {
             HolidayEditor(holiday: holiday)
         case .session(let session):
             SessionDetailView(session: session)
+        case .entry(let entry):
+            TimetableEntryView(entry: entry)
         }
     }
 }

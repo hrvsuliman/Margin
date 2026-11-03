@@ -49,7 +49,8 @@ enum AttachmentStore {
     static func removeOrphanedFiles(context: ModelContext) {
         let attachments = (try? context.fetch(FetchDescriptor<Attachment>())) ?? []
         let images = (try? context.fetch(FetchDescriptor<NoteImage>())) ?? []
-        let known = Set(attachments.map(\.storedName) + images.map(\.storedName))
+        let audio = (try? context.fetch(FetchDescriptor<NoteAudio>())) ?? []
+        let known = Set(attachments.map(\.storedName) + images.map(\.storedName) + audio.map(\.storedName))
         let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
         for file in files where !known.contains(file) {
             try? FileManager.default.removeItem(at: directory.appendingPathComponent(file))

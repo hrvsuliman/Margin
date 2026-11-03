@@ -10,6 +10,7 @@ struct MarginApp: App {
     init() {
         UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
         NavigationBarStyle.apply()
+        BackgroundRefresh.register()
     }
 
     var body: some Scene {

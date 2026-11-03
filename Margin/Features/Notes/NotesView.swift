@@ -22,8 +22,11 @@ struct NotesView: View {
     @Query(sort: \HandwritingProfile.createdAt) private var profiles: [HandwritingProfile]
     @Query(sort: \Exam.date) private var exams: [Exam]
     @Query private var noteImages: [NoteImage]
+    @Query private var metas: [NoteMeta]
 
     @State private var path: [NoteDocument] = []
+    @State private var recording = false
+    @AppStorage("route.openNote") private var routeNote = ""
     @State private var search = ""
     @State private var grouping: Grouping = .recent
     @State private var renaming: NoteDocument?
@@ -84,6 +87,14 @@ struct NotesView: View {
                     }
                     .marginRow()
                 } else {
+                    if search.isEmpty, !pinned.isEmpty {
+                        Section {
+                            ForEach(pinned) { row($0) }
+                        } header: {
+                            Label("Angeheftet", systemImage: "pin")
+                        }
+                        .marginRow()
+                    }
                     ForEach(groups(), id: \.title) { group in
                         Section {
                             ForEach(group.notes) { note in
@@ -120,8 +131,30 @@ struct NotesView: View {
                         Image(systemName: "line.3.horizontal.decrease.circle")
                     }
                     .accessibilityLabel("Ordnen")
-                    Button(action: newNote) {
+                    Menu {
+                        Button(action: newNote) {
+                            Label("Neue Notiz", systemImage: "square.and.pencil")
+                        }
+                        Menu {
+                            ForEach(NoteTemplate.allCases) { template in
+                                Button {
+                                    newNote(from: template)
+                                } label: {
+                                    Label(template.title, systemImage: template.symbol)
+                                }
+                            }
+                        } label: {
+                            Label("Aus Vorlage", systemImage: "doc.on.doc")
+                        }
+                        Button {
+                            recording = true
+                        } label: {
+                            Label("Stunde aufnehmen", systemImage: "waveform")
+                        }
+                    } label: {
                         Image(systemName: "square.and.pencil")
+                    } primaryAction: {
+                        newNote()
                     }
                     .accessibilityLabel("Neue Notiz")
                 }
@@ -138,11 +171,18 @@ struct NotesView: View {
             .confirmationDialog("Notiz löschen?", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
                                 titleVisibility: .visible, presenting: pendingDelete) { note in
                 Button("Löschen", role: .destructive) {
-                    context.delete(note)
-                    try? context.save()
+                    NotePages.delete(note, context: context)
                 }
             } message: { note in
                 Text("„\(note.title.isEmpty ? "Ohne Titel" : note.title)“ wird endgültig gelöscht.")
+            }
+            .fullScreenCover(isPresented: $recording) {
+                RecordingView { note in path.append(note) }
+            }
+            .onChange(of: routeNote, initial: true) {
+                guard !routeNote.isEmpty else { return }
+                if let note = notes.first(where: { $0.uid.uuidString == routeNote }) { path.append(note) }
+                routeNote = ""
             }
             .sheet(item: $export) { file in
                 NavigationStack { ExportPreviewView(file: file) }
@@ -160,9 +200,21 @@ struct NotesView: View {
 
     private func row(_ note: NoteDocument) -> some View {
         NavigationLink(value: note) {
-            NoteRow(note: note, subject: subjectName(note))
+            NoteRow(note: note, subject: subjectName(note),
+                    subpages: NotePages.children(of: note, notes: notes, metas: metas).count)
         }
         .contextMenu {
+            Button {
+                NotePages.togglePin(note, context: context)
+            } label: {
+                let isPinned = NotePages.meta(for: note, in: metas)?.pinned == true
+                Label(isPinned ? "Lösen" : "Anheften", systemImage: isPinned ? "pin.slash" : "pin")
+            }
+            Button {
+                path.append(NotePages.addSubpage(to: note, context: context))
+            } label: {
+                Label("Unterseite hinzufügen", systemImage: "doc.badge.plus")
+            }
             Button {
                 renameText = note.title
                 renaming = note
@@ -205,8 +257,18 @@ struct NotesView: View {
         note.subjectUID.flatMap { uid in subjects.first { $0.uid == uid }?.name }
     }
 
+    private var pinned: [NoteDocument] {
+        let ids = Set(metas.filter(\.pinned).compactMap(\.noteUID))
+        return notes.filter { ids.contains($0.uid) }
+    }
+
     private func groups() -> [NoteGroup] {
-        let list = filtered
+        // Subpages appear inside their parent; pinned notes in their own section (except while searching).
+        var list = filtered
+        if search.trimmingCharacters(in: .whitespaces).isEmpty {
+            let hidden = Set(metas.filter { $0.pinned || $0.parentUID != nil }.compactMap(\.noteUID))
+            list.removeAll { hidden.contains($0.uid) }
+        }
         switch grouping {
         case .recent:
             return [NoteGroup(title: "Zuletzt bearbeitet", notes: list)]
@@ -245,6 +307,17 @@ struct NotesView: View {
         let note = NoteDocument(title: "")
         note.profileUID = nil
         context.insert(note)
+        try? context.save()
+        path.append(note)
+    }
+
+    private func newNote(from template: NoteTemplate) {
+        let note = NoteDocument(title: template.title)
+        note.body = template.body
+        context.insert(note)
+        let meta = NoteMeta(noteUID: note.uid)
+        meta.template = template.rawValue
+        context.insert(meta)
         try? context.save()
         path.append(note)
     }
@@ -295,6 +368,7 @@ struct NotesView: View {
 private struct NoteRow: View {
     let note: NoteDocument
     let subject: String?
+    var subpages = 0
 
     var body: some View {
         HStack(spacing: 12) {
@@ -307,7 +381,8 @@ private struct NoteRow: View {
                     .font(.body.weight(.medium))
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
-                Text([subject, Fmt.date(note.noteDate), note.folder.isEmpty ? nil : note.folder]
+                Text([subject, Fmt.date(note.noteDate), note.folder.isEmpty ? nil : note.folder,
+                      subpages > 0 ? "\(subpages) \(subpages == 1 ? "Unterseite" : "Unterseiten")" : nil]
                     .compactMap { $0 }.joined(separator: " · "))
                     .font(.caption)
                     .foregroundStyle(Palette.secondaryInk)

@@ -16,7 +16,7 @@ enum MCPHandler {
     Mit diesen Werkzeugen kannst du Stundenplan, Aufgaben, Prüfungen mit Themen und Lernstand, Notizen, \
     Karteikarten und Lernstatistik lesen und – falls in der App erlaubt – Aufgaben, Prüfungen, Themen, \
     Karteikarten und Notizen anlegen. Beginne mit get_overview. Notizen erscheinen in der Handschrift \
-    der Nutzerin oder des Nutzers; Markup: "# ", "## ", "- ", "Begriff :: Erklärung".
+    der Nutzerin oder des Nutzers; Markup: "# ", "## ", "- ", "- [ ] ", "> ", "| a | b |", "[[Titel]]", "Begriff :: Erklärung".
     """
 
     /// Handles one JSON-RPC message. Returns nil for notifications (no reply).

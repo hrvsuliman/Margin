@@ -134,9 +134,15 @@ Honest limits: the assistant needs internet and an API key with credit; the MCP 
 - **Providers:** a small `AIProvider` protocol, so providers can be swapped. First an online provider (for example Anthropic's Claude API).
 - **Offline:** a clear "needs internet" state. Everything else in the app keeps working. Apple's on-device model (Foundation Models framework) could serve as an offline option, but it needs **iOS 26 + an Apple Intelligence iPhone (15 Pro or newer)** and a newer Xcode on the build runner. We'll check that when we get there.
 
-## Phase 5: polish
+## Phase 5: connections and structure (built, testing)
 
-Animations, haptics, transitions, rendering performance (glyph caching, background rendering), accessibility (Dynamic Type, VoiceOver), empty states, error handling, testing across screen sizes (SE to Pro Max).
+- **Round A:** Tutor tab with saved conversations (Claude API or Apple's on-device model), Claude-app handoff, the remote **Margin Connector** (Cloudflare Worker + Durable Object relaying MCP to claude.ai custom connectors – the phone syncs a snapshot and applies queued writes), camera everywhere, export as images.
+- **Round B:** WebUntis (unofficial JSON-RPC: `authenticate`, `getTimetable`, `logout`) and iCal feeds → `TimetableEntry`, which replaces the weekly lessons on days that have entries; change notifications; background refresh (`BGAppRefreshTask`, best effort – iOS decides when). Lesson recording with on-device `SFSpeechRecognizer` (de-DE). App Intents for Siri. Document types so "Teilen → Margin" works without a share extension. `.margin` share files (JSON). Daily auto backup to a security-scoped folder bookmark. Backup format version 4 (note pages, pins, recordings; timetable entries are re-fetched, not backed up).
+- **Round C:** note markup extended – `- [ ]` / `- [x]` checkboxes, `> ` callouts, `| a | b |` tables, `---` dividers, `[[Titel]]` links – drawn as pen strokes by `PageWriter`. Subpages, pins and template id live in `NoteMeta` (keyed by note uid, so `NoteDocument` didn't change). Six templates. Rule-based homework parser (no AI, offline) for photo → task. iPad (`TARGETED_DEVICE_FAMILY 1,2`).
+
+## Polish (next)
+
+Animations, haptics, transitions, rendering performance (glyph caching, background rendering), accessibility (Dynamic Type, VoiceOver), empty states, error handling, testing across screen sizes (SE to Pro Max, iPad layouts).
 
 ## Later
 

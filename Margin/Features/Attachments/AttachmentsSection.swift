@@ -18,6 +18,8 @@ struct AttachmentsSection: View {
 
     @State private var showImporter = false
     @State private var photoItems: [PhotosPickerItem] = []
+    @State private var showPhotos = false
+    @State private var showCamera = false
     @State private var previewURL: URL?
     @State private var errorMessage: String?
 
@@ -49,16 +51,38 @@ struct AttachmentsSection: View {
             }
 
             Menu {
+                if CameraPicker.isAvailable {
+                    Button {
+                        showCamera = true
+                    } label: {
+                        Label("Foto aufnehmen", systemImage: "camera")
+                    }
+                }
+                Button {
+                    showPhotos = true
+                } label: {
+                    Label("Aus Fotos", systemImage: "photo.on.rectangle")
+                }
                 Button {
                     showImporter = true
                 } label: {
                     Label("Aus Dateien", systemImage: "folder")
                 }
-                PhotosPicker(selection: $photoItems, maxSelectionCount: 10, matching: .images) {
-                    Label("Aus Fotos", systemImage: "photo.on.rectangle")
-                }
             } label: {
                 Label("Anhang hinzufügen", systemImage: "paperclip")
+            }
+            .photosPicker(isPresented: $showPhotos, selection: $photoItems, maxSelectionCount: 10, matching: .images)
+            .fullScreenCover(isPresented: $showCamera) {
+                CameraPicker { image in
+                    showCamera = false
+                    if let jpeg = image.jpegForStorage() {
+                        let stamp = Fmt.date(.now).replacingOccurrences(of: ".", with: "-")
+                        add { try AttachmentStore.store(jpeg, fileName: "Foto \(stamp).jpg") }
+                    }
+                } onCancel: {
+                    showCamera = false
+                }
+                .ignoresSafeArea()
             }
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
                 switch result {

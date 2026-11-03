@@ -4,7 +4,7 @@ import XCTest
 @testable import Margin
 
 /// Synthetic "handwriting" for tests: simple shapes with known size.
-private enum TestGlyphs {
+enum TestGlyphs {
     /// A box-like stroke from the baseline up to `top` (negative = above baseline).
     static func shape(width: Float = 0.6, top: Float = -1, bottom: Float = 0) -> [Stroke] {
         [[

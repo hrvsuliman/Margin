@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftData
 import SwiftUI
 
@@ -10,6 +11,11 @@ struct TasksView: View {
     @State private var subjectFilter: SchoolSubject?
     @State private var sheet: EditorSheet?
     @State private var pendingDelete: SchoolTask?
+    @State private var scanCamera = false
+    @State private var scanLibrary = false
+    @State private var scanItem: PhotosPickerItem?
+    @State private var scanning = false
+    @State private var suggestion: HomeworkSuggestion?
     @Binding var plannerMode: String
 
     enum Filter: String, CaseIterable, Identifiable {
@@ -59,15 +65,64 @@ struct TasksView: View {
                     PlannerSwitch(mode: $plannerMode)
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        sheet = .newTask(subject: subjectFilter, dueDate: nil, exam: nil, topic: nil)
+                    Menu {
+                        Button {
+                            sheet = .newTask(subject: subjectFilter, dueDate: nil, exam: nil, topic: nil)
+                        } label: {
+                            Label("Neue Aufgabe", systemImage: "plus")
+                        }
+                        Button {
+                            scanCamera = true
+                        } label: {
+                            Label("Hausaufgabe fotografieren", systemImage: "camera")
+                        }
+                        Button {
+                            scanLibrary = true
+                        } label: {
+                            Label("Aus Foto erkennen", systemImage: "photo")
+                        }
                     } label: {
                         Image(systemName: "plus")
+                    } primaryAction: {
+                        sheet = .newTask(subject: subjectFilter, dueDate: nil, exam: nil, topic: nil)
                     }
                     .accessibilityLabel("Neue Aufgabe")
                 }
             }
             .editorSheet($sheet)
+            .fullScreenCover(isPresented: $scanCamera) {
+                CameraPicker { image in
+                    scanCamera = false
+                    Task { await scan(image) }
+                } onCancel: {
+                    scanCamera = false
+                }
+                .ignoresSafeArea()
+            }
+            .photosPicker(isPresented: $scanLibrary, selection: $scanItem, matching: .images)
+            .onChange(of: scanItem) {
+                guard let item = scanItem else { return }
+                scanItem = nil
+                Task {
+                    if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
+                        await scan(image)
+                    }
+                }
+            }
+            .sheet(item: $suggestion) { suggestion in
+                NavigationStack {
+                    TaskEditor(suggestion: suggestion,
+                               subject: subjects.first { $0.name == suggestion.subjectName } ?? subjectFilter)
+                }
+                .tint(Palette.marginRed)
+            }
+            .overlay {
+                if scanning {
+                    ProgressView("Hausaufgabe wird gelesen …")
+                        .padding(20)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                }
+            }
             .confirmationDialog("Aufgabe löschen?", isPresented: deleteBinding, titleVisibility: .visible,
                                 presenting: pendingDelete) { task in
                 Button("Löschen", role: .destructive) { delete(task) }
@@ -75,6 +130,17 @@ struct TasksView: View {
                 Text("Teilaufgaben und Anhänge werden ebenfalls gelöscht.")
             }
         }
+    }
+
+    /// Reads the photo on the device and opens a pre-filled task (with the photo attached).
+    private func scan(_ image: UIImage) async {
+        scanning = true
+        defer { scanning = false }
+        let text = (try? await TextImport.text(from: image)) ?? ""
+        var result = HomeworkParser.suggest(from: text, subjects: subjects.map(\.name))
+        if result.title.isEmpty { result.title = "Hausaufgabe vom Foto" }
+        result.photo = image.jpegForStorage()
+        suggestion = result
     }
 
     @ViewBuilder

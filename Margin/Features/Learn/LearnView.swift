@@ -18,6 +18,7 @@ struct LearnView: View {
     @State private var sheet: EditorSheet?
     @State private var newCard = false
     @State private var showAssistant = false
+    @Environment(\.scenePhase) private var scenePhase
 
     private var upcoming: [Exam] {
         let today = Calendar.school.startOfDay(for: .now)
@@ -36,6 +37,22 @@ struct LearnView: View {
                     }
                     .marginRow()
                 }
+
+                Section {
+                    NavigationLink {
+                        SubjectsView(embedded: true)
+                    } label: {
+                        Label("Fächer und Themen", systemImage: "books.vertical")
+                            .foregroundStyle(Palette.ink)
+                    }
+                    NavigationLink {
+                        GradesView()
+                    } label: {
+                        Label("Noten", systemImage: "chart.bar.doc.horizontal")
+                            .foregroundStyle(Palette.ink)
+                    }
+                }
+                .marginRow()
 
                 Section {
                     Button {
@@ -107,6 +124,13 @@ struct LearnView: View {
             .fullScreenCover(item: $focus) { FocusView(request: $0) }
             .fullScreenCover(item: $review) { FlashcardReviewView(cards: $0.cards) }
             .sheet(isPresented: $showAssistant) { AssistantView() }
+            .onChange(of: scenePhase, initial: true) {
+                // "Hey Siri, Fokuszeit in Margin starten"
+                if scenePhase == .active, UserDefaults.standard.bool(forKey: "intent.startFocus") {
+                    UserDefaults.standard.set(false, forKey: "intent.startFocus")
+                    focus = FocusRequest(topicUID: nil, subjectUID: nil, examUID: nil, minutes: 25, session: nil)
+                }
+            }
         }
     }
 

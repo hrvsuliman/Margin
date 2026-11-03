@@ -24,11 +24,37 @@ It is built entirely from Windows. You never need a Mac or Xcode on your own com
 | 2 | Handwriting studio: pen-and-paper scan, profile, analysis, rendering, note editor, paper styles, PDF export, notes library | ✅ Tested on iPhone (finger capture → reworked to pen & paper) |
 | 3 | Learning: exams with topics, understanding tracker, learning plan, focus timer, flashcards in your handwriting, readiness, statistics, grades, images in notes, Lernzettel | **Built, waiting for you to test** |
 | 4 | Claude: in-app learning assistant + MCP server for Claude Code / Claude Desktop | **Built, waiting for you to test** |
-| 5 | Polish | Not started |
+| 5 | Tutor tab, Claude connector, WebUntis, lesson recording, Siri, sharing, auto backup, Notion-style notes, homework photo → task, iPad | **Built, waiting for you to test** |
 
 Each phase starts only after the previous one builds and you've tested it on your iPhone. The plan and the technical decisions (including how the handwriting will work, honestly) are in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 The app's interface is **German** (dates, Monday-first weeks, German school terms).
+
+### Phase 5 (rounds B and C): what to check
+
+Install over the current version – the database migrates automatically (version 4). **Save a backup first.**
+
+1. **Stundenplan verbinden** (Einstellungen): WebUntis (server, school, user name, password – the password stays in the iPhone's Keychain) or an iCal link. Lessons for the next weeks replace the weekly timetable on those days; cancellations and room changes appear under **Änderungen** in Heute and as a notification. WebUntis access is unofficial – some schools block it; the iCal link is the fallback.
+2. **Stunde aufnehmen** (Notizen › ✎ menu): records the lesson and turns it into a note *on the iPhone* (German speech recognition). The recording stays attached under the note's details.
+3. **Siri / Kurzbefehle:** "Hausaufgabe in Margin eintragen", "Was ist in Margin fällig?", "Fokuszeit in Margin starten".
+4. **Teilen → Margin:** share a PDF, photo or text from any app into Margin → new note or material for a subject.
+5. **Mit Mitschülern teilen:** a flashcard deck (⋯ in Karteikarten) or a note (Handschrift › Teilen › Für Mitschüler) as a `.margin` file via AirDrop/WhatsApp. Tapping it on another iPhone with Margin imports it.
+6. **Automatisches Backup** (Einstellungen › Backup): pick a folder once (iCloud Drive, OneDrive …). Margin saves one backup a day and keeps the last 7.
+7. **Notizen wie Notion:** in the text editor, the keyboard bar has **Checkliste** (tap again to tick) and **＋** for Merkkasten, Tabelle, Trennlinie and **Link zu Notiz**. On paper they are drawn by hand: boxes, ticks, a bar next to the callout, table lines.
+   - `[[Titel]]` links to another note; chips above the text show the parent page, subpages, links and *Erwähnt in* (backlinks). A link to a page that doesn't exist yet shows **＋** – tap to create it.
+   - **Unterseiten:** chip *＋ Unterseite* or long-press a note. Subpages are listed inside their parent, not in the main list.
+   - **Anheften:** long-press a note.
+   - **Vorlagen:** ✎ menu › *Aus Vorlage* – Stundenmitschrift, Cornell, Vokabeln (each "Wort :: Bedeutung" line becomes a flashcard), Versuchsprotokoll, Lernzettel, Referat.
+8. **Hausaufgabe fotografieren** (Aufgaben › hold ＋): photo of the board or homework book → Margin reads it on the iPhone and suggests title, subject and due date ("bis Freitag", "bis 12.11.", "morgen"). Check it, save – the photo is attached.
+9. **iPad:** the same app installs on an iPad (all orientations).
+
+### Phase 5 (round A): what to check
+
+1. **Tabs:** Heute · Planer · Lernen · Notizen · **Tutor**. Fächer and Noten are now at the top of Lernen.
+2. **Tutor:** *Neues Gespräch* – choose **Claude** (API key) or **Apple (offline)** (iPhone 15 Pro or newer with iOS 26 and Apple Intelligence on: free, nothing leaves the phone). Every conversation is saved under **Verlauf**; open one to continue it.
+3. **In der Claude-App:** the questions in the Tutor tab open the Claude app with your normal account. With the connector set up (see below) Claude can read and change Margin data.
+4. **Photos:** attaching photos works again everywhere (it was broken – the picker didn't open from menus), and you can now **take a photo with the camera** in notes (glue in, or recognise board text), attachments and the tutor.
+5. **Export as images:** in a note › Handschrift › *Teilen › Als Bilder* – one PNG per page, to save in Photos or send.
 
 ### Phases 3 and 4: what to check on your iPhone
 
@@ -203,6 +229,31 @@ Now Margin opens.
 - **Some Apple services need a paid developer account (99 €/year):** iCloud sync, push notifications from a server, and sharing data with widgets through App Groups. Local notifications (reminders), on-device storage, the Keychain, PDF export and the Files app all work with a free account. That's why iCloud sync stays in "later".
 
 ---
+
+## Claude-Connector einrichten (Claude ohne API-Schlüssel)
+
+With the connector, Claude uses your **normal Claude subscription** (no API key, no extra cost) and can read your Margin data – in the Claude app on the iPhone, Claude on the PC and on claude.ai. Changes Claude makes (flashcards, notes, tasks …) are queued and applied when Margin syncs.
+
+How it works: the iPhone can't be reached from the internet, so a tiny relay runs in **your own free Cloudflare account**. Margin uploads a snapshot of your data whenever you open it or change something; Claude talks to the relay. A read-only web view of your data for the PC comes for free.
+
+One-time setup on the PC (Node.js is needed – you already have it):
+
+1. Create a free account at <https://dash.cloudflare.com/sign-up>.
+2. In Git Bash, in the `Margin/connector` folder:
+   ```bash
+   npx wrangler login
+   ```
+   ```bash
+   npx wrangler deploy
+   ```
+   The last line shows the address, e.g. `https://margin-connector.<name>.workers.dev`.
+3. On the iPhone: **Tutor › Claude-Connector** › paste that address. Margin shows the **connector address** (with your secret key).
+4. On claude.ai (PC browser): **Settings › Connectors › Add custom connector** › paste the connector address. It then works in the Claude app on the iPhone too.
+5. Optional: *Claude darf Änderungen vormerken* – then Claude can create flashcards, notes, tasks, exams.
+
+Try in the Claude app: *"Was steht bei mir in Margin diese Woche an?"* or *"Frag mich zu meiner nächsten Prüfung ab und trag danach mein Verständnis ein."*
+
+Notes: your data is stored in your own Cloudflare account (not shared with anyone, not readable without the secret address). Claude sees the state of the last sync. `node connector/test.mjs` runs the connector's tests locally.
 
 ## Claude on your PC (MCP)
 

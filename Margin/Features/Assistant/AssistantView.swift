@@ -12,13 +12,20 @@ struct AssistantView: View {
 
     var initialAttachments: [AssistantAttachment] = []
     var initialPrompt: String = ""
+    /// A saved conversation to continue.
+    var thread: ChatThread? = nil
+    /// True inside the Tutor tab (no own navigation stack, no close button).
+    var embedded = false
 
     @State private var session: AssistantSession?
     @State private var input = ""
     @State private var photoItem: PhotosPickerItem?
     @State private var showImporter = false
     @State private var pickingNote = false
-    @State private var setupNeeded = !AssistantPrefs.consented || Keychain.read(ClaudeClient.keyAccount) == nil
+    @State private var showPhotos = false
+    @State private var showCamera = false
+    @State private var showSetup = false
+    @State private var claudeReady = AssistantPrefs.consented && Keychain.read(ClaudeClient.keyAccount) != nil
     @FocusState private var inputFocused: Bool
 
     private let quickPrompts = [
@@ -31,46 +38,89 @@ struct AssistantView: View {
     ]
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if setupNeeded {
-                    AssistantSettingsView(onDone: { setupNeeded = false })
-                } else if let session {
-                    chat(session)
-                } else {
-                    ProgressView()
-                }
+        if embedded {
+            screen
+        } else {
+            NavigationStack { screen }
+                .tint(Palette.marginRed)
+        }
+    }
+
+    private var screen: some View {
+        Group {
+            if let session {
+                chat(session)
+            } else {
+                ProgressView()
             }
-            .background(Palette.paper)
-            .navigationTitle("Claude")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
+        }
+        .background(Palette.paper)
+        .navigationTitle(thread?.title.isEmpty == false ? (thread?.title ?? "Tutor") : "Tutor")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if !embedded {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Schließen") { dismiss() }
                 }
-                if !setupNeeded {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button {
-                            session?.reset()
-                            Haptics.tap()
-                        } label: {
-                            Image(systemName: "square.and.pencil")
-                        }
-                        .accessibilityLabel("Neues Gespräch")
-                        .disabled(session?.busy ?? true)
-                    }
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    session?.reset()
+                    Haptics.tap()
+                } label: {
+                    Image(systemName: "square.and.pencil")
                 }
+                .accessibilityLabel("Neues Gespräch")
+                .disabled(session?.busy ?? true)
             }
         }
-        .tint(Palette.marginRed)
+        .sheet(isPresented: $showSetup, onDismiss: {
+            claudeReady = AssistantPrefs.consented && Keychain.read(ClaudeClient.keyAccount) != nil
+        }) {
+            NavigationStack { AssistantSettingsView(onDone: { showSetup = false }) }
+                .tint(Palette.marginRed)
+        }
         .onAppear {
             guard session == nil else { return }
-            let created = AssistantSession(context: context)
+            let created = AssistantSession(context: context, thread: thread)
             created.attachments = initialAttachments
             session = created
             input = initialPrompt
         }
         .onDisappear { session?.answerApproval(false) }
+    }
+
+    /// Which AI answers, and what's missing to use it.
+    private func engineChooser(_ session: AssistantSession) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("KI", selection: Binding(get: { session.engine }, set: { session.switchEngine($0) })) {
+                Text("Claude").tag(TutorEngine.claudeAPI)
+                Text("Apple (offline)").tag(TutorEngine.onDevice)
+            }
+            .pickerStyle(.segmented)
+            switch session.engine {
+            case .claudeAPI where !claudeReady:
+                Button {
+                    showSetup = true
+                } label: {
+                    Label("Claude mit API-Schlüssel einrichten", systemImage: "key")
+                        .font(.subheadline.weight(.semibold))
+                }
+                Text("Ohne Schlüssel: im Tab Tutor „In Claude öffnen“ nutzt dein Claude-Abo über den Margin-Connector.")
+                    .font(.caption)
+                    .foregroundStyle(Palette.secondaryInk)
+            case .onDevice:
+                if let reason = OnDeviceModel.unavailableReason {
+                    Text(reason).font(.caption).foregroundStyle(Palette.marginRed)
+                } else {
+                    Text("Läuft komplett auf deinem iPhone – kostenlos, offline, nichts wird gesendet. Kann nichts in Margin ändern und liest nur Text.")
+                        .font(.caption)
+                        .foregroundStyle(Palette.secondaryInk)
+                }
+            default:
+                EmptyView()
+            }
+        }
     }
 
     // MARK: Chat
@@ -81,6 +131,7 @@ struct AssistantView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
                         if session.items.isEmpty {
+                            engineChooser(session)
                             intro(session)
                         }
                         ForEach(session.items) { item in
@@ -90,7 +141,7 @@ struct AssistantView: View {
                         if session.busy {
                             HStack(spacing: 8) {
                                 ProgressView()
-                                Text("Claude denkt nach …")
+                                Text(session.engine == .onDevice ? "Apple Intelligence denkt nach …" : "Claude denkt nach …")
                                     .font(.footnote)
                                     .foregroundStyle(Palette.secondaryInk)
                             }
@@ -110,6 +161,16 @@ struct AssistantView: View {
             }
             composer(session)
         }
+        .photosPicker(isPresented: $showPhotos, selection: $photoItem, matching: .images)
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker { image in
+                showCamera = false
+                Task { await attachImage(image, title: "Foto", to: session) }
+            } onCancel: {
+                showCamera = false
+            }
+            .ignoresSafeArea()
+        }
         .onChange(of: photoItem) {
             guard let item = photoItem else { return }
             photoItem = nil
@@ -124,7 +185,8 @@ struct AssistantView: View {
                     Button {
                         session.attachments.append(AssistantAttachment(
                             title: note.title.isEmpty ? "Notiz" : note.title, symbol: "doc.text",
-                            block: ClaudeClient.text("Notiz „\(note.title)“ aus Margin:\n\n\(note.body)")
+                            block: ClaudeClient.text("Notiz „\(note.title)“ aus Margin:\n\n\(note.body)"),
+                            text: note.body
                         ))
                         pickingNote = false
                     } label: {
@@ -269,8 +331,17 @@ struct AssistantView: View {
             }
             HStack(alignment: .bottom, spacing: 8) {
                 Menu {
-                    PhotosPicker(selection: $photoItem, matching: .images) {
-                        Label("Foto (z. B. Arbeitsblatt)", systemImage: "photo")
+                    if CameraPicker.isAvailable {
+                        Button {
+                            showCamera = true
+                        } label: {
+                            Label("Foto aufnehmen", systemImage: "camera")
+                        }
+                    }
+                    Button {
+                        showPhotos = true
+                    } label: {
+                        Label("Foto aus der Mediathek", systemImage: "photo")
                     }
                     Button {
                         showImporter = true
@@ -327,9 +398,16 @@ struct AssistantView: View {
     // MARK: Attachments
 
     private func attachPhoto(_ item: PhotosPickerItem, to session: AssistantSession) async {
-        guard let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data),
-              let jpeg = Self.downsized(image).jpegData(compressionQuality: 0.8) else { return }
-        session.attachments.append(AssistantAttachment(title: "Foto", symbol: "photo", block: ClaudeClient.image(jpeg: jpeg)))
+        guard let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) else { return }
+        await attachImage(image, title: "Foto", to: session)
+    }
+
+    /// Photos go to Claude as images; their recognised text is kept for the on-device model.
+    private func attachImage(_ image: UIImage, title: String, to session: AssistantSession) async {
+        guard let jpeg = Self.downsized(image).jpegData(compressionQuality: 0.8) else { return }
+        let recognised = try? await TextImport.text(from: image)
+        session.attachments.append(AssistantAttachment(title: title, symbol: "photo", block: ClaudeClient.image(jpeg: jpeg),
+                                                       text: recognised))
     }
 
     private func attachFile(_ url: URL, to session: AssistantSession) {
@@ -340,13 +418,13 @@ struct AssistantView: View {
         let type = UTType(filenameExtension: url.pathExtension) ?? .data
         if type.conforms(to: .pdf) {
             guard data.count < 30_000_000 else { return }
-            session.attachments.append(AssistantAttachment(title: name, symbol: "doc.richtext", block: ClaudeClient.pdf(data, title: name)))
-        } else if type.conforms(to: .image), let image = UIImage(data: data),
-                  let jpeg = Self.downsized(image).jpegData(compressionQuality: 0.8) {
-            session.attachments.append(AssistantAttachment(title: name, symbol: "photo", block: ClaudeClient.image(jpeg: jpeg)))
+            session.attachments.append(AssistantAttachment(title: name, symbol: "doc.richtext", block: ClaudeClient.pdf(data, title: name),
+                                                          text: PDFDocument(data: data)?.string))
+        } else if type.conforms(to: .image), let image = UIImage(data: data) {
+            Task { await attachImage(image, title: name, to: session) }
         } else if let text = String(data: data, encoding: .utf8) {
             session.attachments.append(AssistantAttachment(title: name, symbol: "doc.text",
-                                                          block: ClaudeClient.text("Material „\(name)“:\n\n\(text)")))
+                                                          block: ClaudeClient.text("Material „\(name)“:\n\n\(text)"), text: text))
         }
     }
 

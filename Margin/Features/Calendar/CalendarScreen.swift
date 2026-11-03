@@ -20,6 +20,7 @@ struct CalendarScreen: View {
     @Query private var events: [CalendarEvent]
     @Query private var holidays: [Holiday]
     @Query private var sessions: [StudySession]
+    @Query private var entries: [TimetableEntry]
     @Query private var topics: [Topic]
     @Query private var subjects: [SchoolSubject]
     @Binding var plannerMode: String
@@ -30,7 +31,7 @@ struct CalendarScreen: View {
 
     private var agenda: Agenda {
         Agenda(lessons: lessons, exams: exams, tasks: tasks, events: events, holidays: holidays,
-               sessions: sessions, topics: topics, subjects: subjects)
+               sessions: sessions, entries: entries, topics: topics, subjects: subjects)
     }
 
     var body: some View {
@@ -109,7 +110,7 @@ enum Reschedule {
         switch source {
         case .task, .exam, .session: true
         case .event(let event): event.recurrence == .never
-        case .lesson, .holiday: false
+        case .lesson, .holiday, .entry: false
         }
     }
 
@@ -127,7 +128,7 @@ enum Reschedule {
             event.end = calendar.addingDays(days, to: event.end)
         case .session(let session):
             session.date = calendar.addingDays(days, to: session.date)
-        case .lesson, .holiday:
+        case .lesson, .holiday, .entry:
             return
         }
         Haptics.success()

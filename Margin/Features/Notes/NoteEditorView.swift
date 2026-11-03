@@ -30,10 +30,24 @@ struct NoteEditorView: View {
     @State private var errorMessage: String?
     @State private var export: ExportFile?
     @State private var imageItem: PhotosPickerItem?
+    @State private var showOCRPhotos = false
+    @State private var showGluePhotos = false
+    @State private var camera: CameraPurpose?
+
+    enum CameraPurpose: String, Identifiable {
+        case ocr, glue
+        var id: String { rawValue }
+    }
     @State private var showImages = false
     @State private var showAssistant = false
+    @State private var imageExport: ImageExport?
+    @State private var classmateShare: URL?
 
     private var myImages: [NoteImage] { noteImages.filter { $0.noteUID == document.uid } }
+    @Query(sort: \NoteDocument.updatedAt, order: .reverse) private var allNotes: [NoteDocument]
+    private var linkTargets: [NoteDocument] {
+        Array(allNotes.filter { $0.uid != document.uid && !$0.title.trimmingCharacters(in: .whitespaces).isEmpty }.prefix(20))
+    }
 
     init(document: NoteDocument) {
         self.document = document
@@ -94,10 +108,35 @@ struct NoteEditorView: View {
             NavigationStack { ExportPreviewView(file: file) }
                 .tint(Palette.marginRed)
         }
+        .photosPicker(isPresented: $showOCRPhotos, selection: $photoItem, matching: .images)
+        .photosPicker(isPresented: $showGluePhotos, selection: $imageItem, matching: .images)
+        .fullScreenCover(item: $camera) { purpose in
+            CameraPicker { image in
+                camera = nil
+                switch purpose {
+                case .ocr:
+                    runImport { try await TextImport.text(from: image) }
+                case .glue:
+                    Task { await glue(image) }
+                }
+            } onCancel: {
+                camera = nil
+            }
+            .ignoresSafeArea()
+        }
+        .sheet(item: $classmateShare) { url in
+            ActivityView(items: [url])
+                .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $imageExport) { export in
+            NavigationStack { ImageExportView(export: export) }
+                .tint(Palette.marginRed)
+        }
         .sheet(isPresented: $showAssistant) {
             AssistantView(initialAttachments: [AssistantAttachment(
                 title: document.title.isEmpty ? "Diese Notiz" : document.title, symbol: "doc.text",
-                block: ClaudeClient.text("Notiz „\(document.title)“ aus Margin (id \(document.uid.uuidString)):\n\n\(document.body)")
+                block: ClaudeClient.text("Notiz „\(document.title)“ aus Margin (id \(document.uid.uuidString)):\n\n\(document.body)"),
+                text: document.body
             )])
         }
         .sheet(isPresented: $showImages) {
@@ -164,6 +203,7 @@ struct NoteEditorView: View {
                 .padding(.vertical, 6)
             }
             .buttonStyle(.plain)
+            NotePagesBar(document: document)
             Rectangle().fill(Palette.ruling).frame(height: 1)
             MarkupTextView(text: $document.body, controller: textController)
         }
@@ -175,8 +215,27 @@ struct NoteEditorView: View {
                     .accessibilityLabel("Zwischenüberschrift")
                 Button { textController.apply(.bullet) } label: { Image(systemName: "list.bullet") }
                     .accessibilityLabel("Aufzählung")
-                Button { textController.apply(.plain) } label: { Image(systemName: "text.alignleft") }
-                    .accessibilityLabel("Normaler Text")
+                Button { textController.toggleCheckbox() } label: { Image(systemName: "checklist") }
+                    .accessibilityLabel("Checkliste, abhaken")
+                Menu {
+                    Button { textController.apply(.callout) } label: { Label("Merkkasten", systemImage: "text.quote") }
+                    Button { textController.insert("| Spalte | Spalte |\n|---|---|\n| | |\n") } label: {
+                        Label("Tabelle", systemImage: "tablecells")
+                    }
+                    Button { textController.insert("---\n") } label: { Label("Trennlinie", systemImage: "minus") }
+                    Button { textController.apply(.plain) } label: { Label("Normaler Text", systemImage: "text.alignleft") }
+                    Menu {
+                        ForEach(linkTargets) { note in
+                            Button(note.title) { textController.insert("[[\(note.title)]]") }
+                        }
+                        Button { textController.insert("[[Neue Seite]]") } label: { Label("Neue Seite …", systemImage: "plus") }
+                    } label: {
+                        Label("Link zu Notiz", systemImage: "link")
+                    }
+                } label: {
+                    Image(systemName: "plus.circle")
+                }
+                .accessibilityLabel("Mehr Formate")
                 Spacer()
                 Button { textController.endEditing() } label: { Image(systemName: "keyboard.chevron.compact.down") }
                     .accessibilityLabel("Tastatur ausblenden")
@@ -233,10 +292,25 @@ struct NoteEditorView: View {
                 } label: {
                     Label("Papier & Stift", systemImage: "slider.horizontal.3")
                 }
-                Button {
-                    exportPDF()
+                Menu {
+                    Button {
+                        exportPDF()
+                    } label: {
+                        Label("Als PDF", systemImage: "doc.richtext")
+                    }
+                    Button {
+                        exportImages()
+                    } label: {
+                        Label("Als Bilder (eine pro Seite)", systemImage: "photo.on.rectangle")
+                    }
+                    Button {
+                        let subject = subjects.first { $0.uid == document.subjectUID }?.name
+                        classmateShare = try? ShareService.note(document, subject: subject)
+                    } label: {
+                        Label("Für Mitschüler (.margin)", systemImage: "person.2")
+                    }
                 } label: {
-                    Label("PDF", systemImage: "square.and.arrow.up")
+                    Label("Teilen", systemImage: "square.and.arrow.up")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Palette.ink)
@@ -281,11 +355,33 @@ struct NoteEditorView: View {
                 } label: {
                     Label("PDF, Text oder Bild", systemImage: "doc")
                 }
-                PhotosPicker(selection: $photoItem, matching: .images) {
-                    Label("Tafelbild abschreiben (Text erkennen)", systemImage: "text.viewfinder")
+                Section("Text erkennen") {
+                    if CameraPicker.isAvailable {
+                        Button {
+                            camera = .ocr
+                        } label: {
+                            Label("Tafel fotografieren", systemImage: "camera.viewfinder")
+                        }
+                    }
+                    Button {
+                        showOCRPhotos = true
+                    } label: {
+                        Label("Foto aus der Mediathek", systemImage: "text.viewfinder")
+                    }
                 }
-                PhotosPicker(selection: $imageItem, matching: .images) {
-                    Label("Bild einkleben", systemImage: "photo.badge.plus")
+                Section("Bild einkleben") {
+                    if CameraPicker.isAvailable {
+                        Button {
+                            camera = .glue
+                        } label: {
+                            Label("Foto aufnehmen", systemImage: "camera")
+                        }
+                    }
+                    Button {
+                        showGluePhotos = true
+                    } label: {
+                        Label("Aus der Mediathek", systemImage: "photo.badge.plus")
+                    }
                 }
                 if !myImages.isEmpty {
                     Button {
@@ -356,11 +452,16 @@ struct NoteEditorView: View {
 
     /// Stores the picture and adds a `[[Bild:…]]` line where it should appear.
     private func insertImage(_ item: PhotosPickerItem) async {
+        guard let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) else {
+            errorMessage = "Das Bild konnte nicht geladen werden."
+            return
+        }
+        await glue(image)
+    }
+
+    private func glue(_ image: UIImage) async {
         do {
-            guard let data = try await item.loadTransferable(type: Data.self), let image = UIImage(data: data) else {
-                throw TextImportError.noText
-            }
-            let jpeg = image.jpegData(compressionQuality: 0.85) ?? data
+            guard let jpeg = image.jpegForStorage() else { throw TextImportError.noText }
             let stored = try AttachmentStore.store(jpeg, fileName: "bild.jpg")
             let noteImage = NoteImage(noteUID: document.uid, storedName: stored.storedName)
             context.insert(noteImage)
@@ -392,6 +493,27 @@ struct NoteEditorView: View {
             } catch {
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+
+    /// Each page as a sharp PNG (3× A4 points), ready for Photos, WhatsApp or AirDrop.
+    private func exportImages() {
+        let settings = renderedSettings
+        let currentPages = pages
+        let title = document.title.isEmpty ? "Notiz" : document.title
+        Task {
+            let urls = await Task.detached(priority: .userInitiated) { () -> [URL] in
+                let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Bilder-\(UUID().uuidString)")
+                try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                return currentPages.compactMap { page in
+                    let image = PageRenderer.thumbnail(of: page, settings: settings, width: settings.pageSize.width * 1.5)
+                    guard let data = image.pngData() else { return nil }
+                    let name = currentPages.count == 1 ? "\(title).png" : "\(title) – Seite \(page.number).png"
+                    let url = folder.appendingPathComponent(name.replacingOccurrences(of: "/", with: "-"))
+                    return (try? data.write(to: url)) != nil ? url : nil
+                }
+            }.value
+            imageExport = ImageExport(urls: urls, title: title)
         }
     }
 

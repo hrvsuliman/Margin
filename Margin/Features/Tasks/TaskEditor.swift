@@ -10,6 +10,8 @@ struct TaskEditor: View {
     @Query private var holidays: [Holiday]
 
     private let task: SchoolTask?
+    /// A photo of the homework, attached when a suggested task is saved.
+    private var pendingPhoto: Data?
     @State private var draft: Draft
     @State private var newSubtaskTitle = ""
     @FocusState private var titleFocused: Bool
@@ -72,6 +74,20 @@ struct TaskEditor: View {
         draft.topic = topic
         if exam != nil { draft.kind = .examPrep }
         if let dueDate { draft.dueDate = Calendar.school.startOfDay(for: dueDate) }
+        _draft = State(initialValue: draft)
+    }
+
+    /// A task suggested from a photo of the board or homework book.
+    init(suggestion: HomeworkSuggestion, subject: SchoolSubject?) {
+        self.task = nil
+        self.pendingPhoto = suggestion.photo
+        var draft = Draft()
+        draft.title = suggestion.title
+        draft.details = suggestion.details
+        draft.subject = subject
+        if let due = suggestion.dueDate {
+            draft.dueDate = Calendar.school.startOfDay(for: due)
+        }
         _draft = State(initialValue: draft)
     }
 
@@ -278,6 +294,11 @@ struct TaskEditor: View {
                 subtask.task = target
             }
             index += 1
+        }
+
+        if isNew, let pendingPhoto, let attachment = try? AttachmentStore.store(pendingPhoto, fileName: "Hausaufgabe.jpg") {
+            context.insert(attachment)
+            attachment.task = target
         }
 
         context.commit()

@@ -295,3 +295,127 @@ final class NoteImage {
         self.createdAt = .now
     }
 }
+
+/// Which AI answers in a tutor conversation.
+enum TutorEngine: String, CaseIterable, Identifiable, Codable, Sendable {
+    /// Claude through the Anthropic API with the user's own key.
+    case claudeAPI
+    /// Apple's on-device model (iOS 26, Apple Intelligence devices) – free and offline.
+    case onDevice
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .claudeAPI: "Claude (API-Schlüssel)"
+        case .onDevice: "Apple Intelligence (auf dem iPhone)"
+        }
+    }
+}
+
+/// A saved tutor conversation ("Verlauf").
+@Model
+final class ChatThread {
+    var uid: UUID = UUID()
+    var title: String = ""
+    var engineRaw: String = TutorEngine.claudeAPI.rawValue
+    var createdAt: Date = Date.now
+    var updatedAt: Date = Date.now
+    /// The visible chat (JSON).
+    var itemsData: Data = Data()
+    /// The raw API messages, so a Claude conversation can be continued exactly (JSON).
+    var messagesData: Data = Data()
+
+    init(engine: TutorEngine) {
+        self.uid = UUID()
+        self.engineRaw = engine.rawValue
+        self.createdAt = .now
+        self.updatedAt = .now
+    }
+
+    var engine: TutorEngine {
+        get { TutorEngine(rawValue: engineRaw) ?? .claudeAPI }
+        set { engineRaw = newValue.rawValue }
+    }
+}
+
+enum EntryStatus: String, Codable, Sendable {
+    case normal, cancelled, changed, exam, additional
+
+    var title: String {
+        switch self {
+        case .normal: ""
+        case .cancelled: "Entfall"
+        case .changed: "Vertretung/Änderung"
+        case .exam: "Prüfung"
+        case .additional: "Zusätzlich"
+        }
+    }
+}
+
+/// A real lesson on a real day, imported from WebUntis or a calendar (iCal).
+/// Where these exist they replace the weekly timetable, including cancellations.
+@Model
+final class TimetableEntry {
+    var uid: UUID = UUID()
+    /// Id in the source, to detect changes between two imports.
+    var externalID: String = ""
+    var source: String = "untis"
+    var start: Date = Date.now
+    var end: Date = Date.now
+    var subjectUID: UUID?
+    var subjectName: String = ""
+    var room: String = ""
+    var teacher: String = ""
+    var statusRaw: String = EntryStatus.normal.rawValue
+    /// Substitution text, lesson topic or other info from the school.
+    var info: String = ""
+    var fetchedAt: Date = Date.now
+
+    init(externalID: String, source: String, start: Date, end: Date) {
+        self.uid = UUID()
+        self.externalID = externalID
+        self.source = source
+        self.start = start
+        self.end = end
+        self.fetchedAt = .now
+    }
+
+    var status: EntryStatus {
+        get { EntryStatus(rawValue: statusRaw) ?? .normal }
+        set { statusRaw = newValue.rawValue }
+    }
+}
+
+/// Extra page information for a note: nesting (subpages), template, pin.
+@Model
+final class NoteMeta {
+    var uid: UUID = UUID()
+    var noteUID: UUID?
+    var parentUID: UUID?
+    var pinned: Bool = false
+    var template: String = ""
+
+    init(noteUID: UUID) {
+        self.uid = UUID()
+        self.noteUID = noteUID
+    }
+}
+
+/// An audio recording belonging to a note (e.g. a recorded lesson).
+@Model
+final class NoteAudio {
+    var uid: UUID = UUID()
+    var noteUID: UUID?
+    var storedName: String = ""
+    var duration: Double = 0
+    var createdAt: Date = Date.now
+
+    init(noteUID: UUID, storedName: String, duration: Double) {
+        self.uid = UUID()
+        self.noteUID = noteUID
+        self.storedName = storedName
+        self.duration = duration
+        self.createdAt = .now
+    }
+}
