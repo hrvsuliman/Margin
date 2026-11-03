@@ -10,8 +10,8 @@ struct BackupFile: Codable {
 
     var format: String = BackupFile.formatName
     /// 1 = Phase 1, 2 = adds handwriting and notes, 3 = learning, grades, note images,
-    /// 4 = note pages/pins and lesson recordings.
-    var version: Int = 4
+    /// 4 = note pages/pins and lesson recordings, 5 = subject pinboards.
+    var version: Int = 5
     var exportedAt: Date = .now
     var appVersion: String = ""
     var settings: SettingsSnapshot?
@@ -32,6 +32,7 @@ struct BackupFile: Codable {
     var chats: [ChatDTO]?
     var noteMeta: [NoteMetaDTO]?
     var recordings: [RecordingDTO]?
+    var pins: [PinDTO]?
 
     struct SubjectDTO: Codable {
         var uid: UUID; var name: String; var colorKey: String; var teacher: String; var room: String
@@ -129,6 +130,10 @@ struct BackupFile: Codable {
 
     struct NoteMetaDTO: Codable {
         var uid: UUID; var note: UUID?; var parent: UUID?; var pinned: Bool; var template: String
+    }
+    struct PinDTO: Codable {
+        var uid: UUID; var subject: UUID?; var kind: String; var title: String; var text: String; var url: String
+        var note: UUID?; var color: String; var sortIndex: Int; var createdAt: Date; var photo: Data?
     }
     struct RecordingDTO: Codable {
         var uid: UUID; var note: UUID?; var duration: Double; var createdAt: Date; var data: Data
@@ -249,6 +254,13 @@ enum BackupService {
             return BackupFile.RecordingDTO(uid: audio.uid, note: audio.noteUID, duration: audio.duration,
                                            createdAt: audio.createdAt, data: data)
         }
+        file.pins = all(PinItem.self, context).map { pin in
+            let photo = pin.storedName.isEmpty ? nil
+                : try? Data(contentsOf: AttachmentStore.directory.appendingPathComponent(pin.storedName))
+            return BackupFile.PinDTO(uid: pin.uid, subject: pin.subjectUID, kind: pin.kindRaw, title: pin.title, text: pin.text,
+                                     url: pin.urlString, note: pin.noteUID, color: pin.colorKey, sortIndex: pin.sortIndex,
+                                     createdAt: pin.createdAt, photo: photo)
+        }
         file.notes = all(NoteDocument.self, context).map { note in
             BackupFile.NoteDTO(
                 uid: note.uid, title: note.title, body: note.body, folder: note.folder, noteDate: note.noteDate,
@@ -272,7 +284,7 @@ enum BackupService {
               file.format == BackupFile.formatName else {
             throw BackupError.notABackup
         }
-        guard file.version <= 4 else { throw BackupError.newerVersion }
+        guard file.version <= 5 else { throw BackupError.newerVersion }
         return file
     }
 
@@ -464,6 +476,21 @@ enum BackupService {
             meta.template = dto.template
             context.insert(meta)
         }
+        for dto in file.pins ?? [] {
+            let pin = PinItem(subjectUID: dto.subject, kind: PinKind(rawValue: dto.kind) ?? .sticky)
+            pin.uid = dto.uid
+            pin.title = dto.title
+            pin.text = dto.text
+            pin.urlString = dto.url
+            pin.noteUID = dto.note
+            pin.colorKey = dto.color
+            pin.sortIndex = dto.sortIndex
+            pin.createdAt = dto.createdAt
+            if let photo = dto.photo {
+                pin.storedName = try AttachmentStore.store(photo, fileName: "pin.jpg").storedName
+            }
+            context.insert(pin)
+        }
         for dto in file.recordings ?? [] {
             let stored = try AttachmentStore.store(dto.data, fileName: "aufnahme.m4a")
             let audio = NoteAudio(noteUID: dto.note ?? UUID(), storedName: stored.storedName, duration: dto.duration)
@@ -506,6 +533,7 @@ enum BackupService {
         all(NoteMeta.self, context).forEach { context.delete($0) }
         all(NoteAudio.self, context).forEach { context.delete($0) }
         all(TimetableEntry.self, context).forEach { context.delete($0) }
+        all(PinItem.self, context).forEach { context.delete($0) }
         try? context.save()
         AttachmentStore.removeAllFiles()
     }

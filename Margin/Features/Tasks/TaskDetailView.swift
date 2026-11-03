@@ -142,8 +142,16 @@ struct TaskDetailView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
                     if let subject = task.subject {
-                        SubjectDot(color: subject.color.color, size: 8)
-                        Text(subject.name)
+                        // Tap the subject to open its page (pinboard, progress to the next exam).
+                        NavigationLink {
+                            SubjectDetailView(subject: subject)
+                        } label: {
+                            HStack(spacing: 6) {
+                                SubjectDot(color: subject.color.color, size: 8)
+                                Text(subject.name).underline(color: Palette.ruling)
+                            }
+                        }
+                        .buttonStyle(.plain)
                         Text("·")
                     }
                     Label(task.kind.title, systemImage: task.kind.symbol)

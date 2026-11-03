@@ -49,9 +49,18 @@ enum MarginSchemaV4: VersionedSchema {
     }
 }
 
+/// Phase 6: subject pinboards.
+enum MarginSchemaV5: VersionedSchema {
+    static let versionIdentifier = Schema.Version(5, 0, 0)
+
+    static var models: [any PersistentModel.Type] {
+        MarginSchemaV4.models + [PinItem.self]
+    }
+}
+
 enum MarginMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [MarginSchemaV1.self, MarginSchemaV2.self, MarginSchemaV3.self, MarginSchemaV4.self]
+        [MarginSchemaV1.self, MarginSchemaV2.self, MarginSchemaV3.self, MarginSchemaV4.self, MarginSchemaV5.self]
     }
 
     static var stages: [MigrationStage] {
@@ -60,13 +69,14 @@ enum MarginMigrationPlan: SchemaMigrationPlan {
             .lightweight(fromVersion: MarginSchemaV1.self, toVersion: MarginSchemaV2.self),
             .lightweight(fromVersion: MarginSchemaV2.self, toVersion: MarginSchemaV3.self),
             .lightweight(fromVersion: MarginSchemaV3.self, toVersion: MarginSchemaV4.self),
+            .lightweight(fromVersion: MarginSchemaV4.self, toVersion: MarginSchemaV5.self),
         ]
     }
 }
 
 @MainActor
 enum Persistence {
-    static let schema = Schema(versionedSchema: MarginSchemaV4.self)
+    static let schema = Schema(versionedSchema: MarginSchemaV5.self)
 
     /// The app's database, stored on the device only.
     static let container: ModelContainer = {

@@ -85,6 +85,14 @@ enum MarginTools {
                     "kind": ["type": "string", "enum": TaskKind.allCases.map(\.rawValue)],
                     "details": string("Optional notes"),
                  ], required: ["title"]), readOnly: false, label: "Aufgabe anlegen"),
+        ToolSpec(name: "pin_to_board",
+                 description: "Pin something to a subject's pinboard: a video or web link (url), or a sticky note (text). Use it for good explainer videos or short reminders.",
+                 schema: object([
+                    "subject": string("Subject name"),
+                    "title": string("Short title, optional"),
+                    "url": string("Video or web address, optional"),
+                    "text": string("Sticky-note text or a comment, optional"),
+                 ], required: ["subject"]), readOnly: false, label: "An Pinnwand heften"),
         ToolSpec(name: "complete_task",
                  description: "Mark a task as done.",
                  schema: object(["id": string("Task id from list_tasks")], required: ["id"]), readOnly: false, label: "Aufgabe abhaken"),
@@ -157,6 +165,7 @@ enum MarginTools {
         case "get_study_stats": return stats(context)
         case "add_task": return addTask(input, context)
         case "complete_task": return completeTask(input, context)
+        case "pin_to_board": return pinToBoard(input, context)
         case "add_exam": return addExam(input, context)
         case "add_topics": return addTopics(input, context)
         case "set_understanding": return setUnderstanding(input, context)
@@ -389,6 +398,26 @@ enum MarginTools {
         context.commit()
         return .ok(["created_task_id": task.uid.uuidString, "subject": subject?.name ?? "kein Fach",
                     "due": task.dueDate.map(day) ?? "kein Datum"])
+    }
+
+    private static func pinToBoard(_ input: [String: Any], _ context: ModelContext) -> ToolOutcome {
+        guard let subject = subject(named: input["subject"] as? String, context) else {
+            return missingSubject(input["subject"] as? String, context)
+        }
+        let text = (input["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let address = (input["url"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+        let url = address.isEmpty ? nil : URL(string: address.contains("://") ? address : "https://" + address)
+        guard url != nil || !text.isEmpty else { return .error("Gib eine url oder einen text an.") }
+        let kind: PinKind = url.map { PinLinks.youTubeID($0) != nil || PinLinks.isVideoHost($0) ? .video : .link } ?? .sticky
+        let pin = PinItem(subjectUID: subject.uid, kind: kind)
+        pin.title = input["title"] as? String ?? url?.host() ?? ""
+        pin.text = text
+        pin.urlString = url?.absoluteString ?? ""
+        pin.colorKey = kind == .sticky ? "mustard" : subject.colorKey
+        pin.sortIndex = (all(PinItem.self, context).filter { $0.subjectUID == subject.uid }.map(\.sortIndex).max() ?? -1) + 1
+        context.insert(pin)
+        context.commit()
+        return .ok(["pinned": pin.kind.title, "subject": subject.name])
     }
 
     private static func completeTask(_ input: [String: Any], _ context: ModelContext) -> ToolOutcome {

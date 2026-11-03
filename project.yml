@@ -16,7 +16,7 @@ settings:
   base:
     # Bump MARKETING_VERSION when a phase ships. CI overrides
     # CURRENT_PROJECT_VERSION with the GitHub Actions run number.
-    MARKETING_VERSION: "0.5.0"
+    MARKETING_VERSION: "0.6.0"
     CURRENT_PROJECT_VERSION: "1"
     # Swift 6 compiler, Swift 5 language mode (avoids strict-concurrency errors).
     SWIFT_VERSION: "5.0"

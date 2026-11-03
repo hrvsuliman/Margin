@@ -50,7 +50,9 @@ enum AttachmentStore {
         let attachments = (try? context.fetch(FetchDescriptor<Attachment>())) ?? []
         let images = (try? context.fetch(FetchDescriptor<NoteImage>())) ?? []
         let audio = (try? context.fetch(FetchDescriptor<NoteAudio>())) ?? []
-        let known = Set(attachments.map(\.storedName) + images.map(\.storedName) + audio.map(\.storedName))
+        let pins = (try? context.fetch(FetchDescriptor<PinItem>())) ?? []
+        let known = Set(attachments.map(\.storedName) + images.map(\.storedName) + audio.map(\.storedName)
+                        + pins.map(\.storedName).filter { !$0.isEmpty })
         let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
         for file in files where !known.contains(file) {
             try? FileManager.default.removeItem(at: directory.appendingPathComponent(file))

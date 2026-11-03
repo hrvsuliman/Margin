@@ -1,7 +1,7 @@
 import SwiftData
 import SwiftUI
 
-/// Everything about one subject: timetable, exams, tasks, topics and materials.
+/// Everything about one subject: progress to the next exam, pinboard, timetable, exams, tasks, topics and materials.
 struct SubjectDetailView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -37,6 +37,10 @@ struct SubjectDetailView: View {
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
 
+            SubjectProgressSection(subject: subject) {
+                sheet = .newExam(subject: subject, date: nil)
+            }
+            PinboardSection(subject: subject) { openedNote = $0 }
             lessonsSection
             examsSection
             tasksSection

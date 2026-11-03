@@ -419,3 +419,60 @@ final class NoteAudio {
         self.createdAt = .now
     }
 }
+
+// MARK: - Phase 6: subject pinboard
+
+enum PinKind: String, CaseIterable, Codable, Sendable {
+    case note, video, link, photo, sticky
+
+    var title: String {
+        switch self {
+        case .note: "Notiz"
+        case .video: "Video"
+        case .link: "Link"
+        case .photo: "Foto"
+        case .sticky: "Zettel"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .note: "doc.text"
+        case .video: "play.rectangle"
+        case .link: "link"
+        case .photo: "photo"
+        case .sticky: "note.text"
+        }
+    }
+}
+
+/// Something pinned to a subject's board: a note, a video, a link, a photo or a sticky note.
+@Model
+final class PinItem {
+    var uid: UUID = UUID()
+    var subjectUID: UUID?
+    var kindRaw: String = PinKind.sticky.rawValue
+    var title: String = ""
+    var text: String = ""
+    var urlString: String = ""
+    /// Photo file in the attachment folder.
+    var storedName: String = ""
+    var noteUID: UUID?
+    var colorKey: String = "mustard"
+    var sortIndex: Int = 0
+    var createdAt: Date = Date.now
+
+    init(subjectUID: UUID?, kind: PinKind) {
+        self.uid = UUID()
+        self.subjectUID = subjectUID
+        self.kindRaw = kind.rawValue
+        self.createdAt = .now
+    }
+
+    var kind: PinKind {
+        get { PinKind(rawValue: kindRaw) ?? .sticky }
+        set { kindRaw = newValue.rawValue }
+    }
+
+    var url: URL? { URL(string: urlString.trimmingCharacters(in: .whitespaces)) }
+}
