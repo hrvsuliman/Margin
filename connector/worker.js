@@ -8,6 +8,14 @@
 //   POST /sync/SECRET   iPhone → snapshot up, pending changes down
 //   POST /mcp/SECRET    MCP endpoint for Claude (Streamable HTTP, JSON responses)
 //   GET  /view/SECRET   read-only web page of your data (for the PC)
+//
+// End-to-end encrypted sync between iPhone, Android and PC (docs/SYNC.md):
+//   POST /e2e/push      encrypted records up (last write wins per uid)
+//   GET  /e2e/pull      encrypted records changed since a cursor
+//   GET  /e2e/info      record count and current cursor
+// The vault token goes in "Authorization: Bearer <token>". The token and the
+// encryption key are both derived from a passphrase on the device; this Worker
+// only ever sees the token and ciphertext.
 
 const SUPPORTED_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"];
 
@@ -15,6 +23,12 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const [kind, secret] = url.pathname.split("/").filter(Boolean);
+    if (kind === "e2e") {
+      if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+      const token = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      if (!/^[0-9a-f]{64}$/.test(token)) return json({ error: "missing or malformed vault token" }, 401);
+      return env.STORE.get(env.STORE.idFromName("vault:" + token)).fetch(request);
+    }
     if (!["sync", "mcp", "view"].includes(kind) || !secret || secret.length < 32) {
       return new Response("Margin Connector läuft.", { status: 200 });
     }
@@ -35,6 +49,7 @@ export class MarginStore {
       if (kind === "sync") return await this.sync(request);
       if (kind === "mcp") return await this.mcp(request);
       if (kind === "view") return await this.view();
+      if (kind === "e2e") return await this.vault(request);
     } catch (error) {
       return json({ error: String(error) }, 500);
     }
@@ -193,6 +208,81 @@ export class MarginStore {
     }
   }
 
+  // ---------------------------------------------------------------- encrypted sync
+
+  // Storage layout of a vault (one Durable Object per vault token):
+  //   "seq"            last change number handed out
+  //   "r:<uid>"        { uid, updatedAt, blob, seq }   the current version of a record
+  //   "c:<seq>"        uid                             change log, one entry per record
+  async vault(request) {
+    const url = new URL(request.url);
+    const action = url.pathname.split("/").filter(Boolean)[1];
+    const storage = this.ctx.storage;
+
+    if (action === "info" && request.method === "GET") {
+      const changes = await storage.list({ prefix: "c:" });
+      return json({ records: changes.size, cursor: (await storage.get("seq")) || 0 });
+    }
+
+    if (action === "pull" && request.method === "GET") {
+      const since = Math.max(0, parseInt(url.searchParams.get("since") || "0", 10) || 0);
+      const limit = Math.min(PULL_LIMIT, Math.max(1, parseInt(url.searchParams.get("limit") || String(PULL_LIMIT), 10) || PULL_LIMIT));
+      const changes = await storage.list({ prefix: "c:", start: changeKey(since + 1), limit: limit + 1 });
+      const entries = [...changes.entries()];
+      const more = entries.length > limit;
+      const records = [];
+      let cursor = since;
+      for (const [key, uid] of entries.slice(0, limit)) {
+        const record = await storage.get("r:" + uid);
+        cursor = Number(key.slice(2));
+        if (record) records.push(record);
+      }
+      if (!more) cursor = Math.max(cursor, (await storage.get("seq")) || 0);
+      return json({ records, cursor, more });
+    }
+
+    if (action === "push" && request.method === "POST") {
+      const body = await request.json().catch(() => null);
+      const incoming = Array.isArray(body?.records) ? body.records : null;
+      if (!incoming) return json({ error: "body must be { records: [...] }" }, 400);
+      if (incoming.length > PUSH_LIMIT) return json({ error: `at most ${PUSH_LIMIT} records per push` }, 413);
+
+      let seq = (await storage.get("seq")) || 0;
+      const accepted = [];
+      const rejected = [];
+      for (const record of incoming) {
+        const { uid, updatedAt, blob } = record || {};
+        if (typeof uid !== "string" || !/^[0-9A-Za-z-]{1,64}$/.test(uid)) {
+          rejected.push({ uid: String(uid), reason: "invalid" });
+          continue;
+        }
+        if (!Number.isSafeInteger(updatedAt) || updatedAt <= 0 || typeof blob !== "string" || !blob) {
+          rejected.push({ uid, reason: "invalid" });
+          continue;
+        }
+        if (blob.length > MAX_BLOB) {
+          rejected.push({ uid, reason: "tooLarge" });
+          continue;
+        }
+        const current = await storage.get("r:" + uid);
+        if (current && current.updatedAt >= updatedAt) {
+          // Last write wins: the server already has this or a newer version.
+          rejected.push({ uid, reason: "stale", updatedAt: current.updatedAt });
+          continue;
+        }
+        seq += 1;
+        if (current) await storage.delete(changeKey(current.seq));
+        await storage.put("r:" + uid, { uid, updatedAt, blob, seq });
+        await storage.put(changeKey(seq), uid);
+        accepted.push(uid);
+      }
+      await storage.put("seq", seq);
+      return json({ accepted, rejected, cursor: seq });
+    }
+
+    return json({ error: "unknown sync action" }, 404);
+  }
+
   // ---------------------------------------------------------------- web view
 
   async view() {
@@ -223,8 +313,23 @@ export class MarginStore {
   }
 }
 
+const PUSH_LIMIT = 200;
+const PULL_LIMIT = 500;
+// Durable Object values may be up to 2 MB; base64 ciphertext of a ~1.4 MB record.
+const MAX_BLOB = 1_900_000;
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type",
+};
+
+// Zero-padded so that the change log sorts by number.
+function changeKey(seq) {
+  return "c:" + String(seq).padStart(12, "0");
+}
+
 function json(value, status = 200) {
-  return new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
+  return new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json", ...CORS } });
 }
 
 function ok(value) {
