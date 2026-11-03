@@ -27,12 +27,14 @@ final class NoteBlockTests: XCTestCase {
 
     func testTablesChecklistsAndDividersAreDrawnInInk() {
         let font = HandwritingFont(source: TestGlyphs.fullSource(), penRatio: 0.15)
-        let plain = NoteLayout.layout(NoteContent(title: "", header: "", body: "Text", seed: 3), settings: PageSettings(), font: font)
+        // Without the page number, which would stretch the ink to the bottom of the page.
+        var settings = PageSettings()
+        settings.showPageNumbers = false
+        let plain = NoteLayout.layout(NoteContent(title: "", header: "", body: "Text", seed: 3), settings: settings, font: font)
         let body = "Text\n- [x] erledigt\n> Merke\n---\n| Zeit | Wert |\n|---|---|\n| 1 | 2 |"
-        let rich = NoteLayout.layout(NoteContent(title: "", header: "", body: body, seed: 3), settings: PageSettings(), font: font)
+        let rich = NoteLayout.layout(NoteContent(title: "", header: "", body: body, seed: 3), settings: settings, font: font)
         XCTAssertEqual(rich.count, 1)
         XCTAssertGreaterThan(rich[0].ink.boundingBoxOfPath.height, plain[0].ink.boundingBoxOfPath.height * 3)
-        let settings = PageSettings()
         XCTAssertLessThanOrEqual(rich[0].ink.boundingBoxOfPath.maxX, settings.pageSize.width - settings.marginRight + 8)
     }
 
