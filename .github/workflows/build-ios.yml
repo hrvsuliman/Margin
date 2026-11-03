@@ -5,6 +5,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      runner:
+        description: "macOS runner (pick another one when GitHub has no capacity)"
+        type: choice
+        default: macos-26
+        options: [macos-26, macos-15, macos-15-intel]
 
 # A newer push to the same branch cancels the older, still-running build.
 concurrency:
@@ -16,7 +22,8 @@ jobs:
     name: Build unsigned IPA
     # macos-26 ships Xcode 26 (iOS 26 SDK), needed for Apple's on-device model
     # (Foundation Models). The app still runs on iOS 17 and newer.
-    runs-on: macos-26
+    # When the arm64 machines are busy, run it by hand on another runner.
+    runs-on: ${{ inputs.runner || 'macos-26' }}
     timeout-minutes: 30
     env:
       HOMEBREW_NO_AUTO_UPDATE: "1"
@@ -27,6 +34,11 @@ jobs:
 
       - name: Test the Claude connector (JavaScript)
         run: node connector/test.mjs
+
+      - name: Use the newest Xcode on the runner
+        run: |
+          newest=$(ls -d /Applications/Xcode_*.app 2>/dev/null | grep -v beta | sort -V | tail -1)
+          if [ -n "$newest" ]; then sudo xcode-select -s "$newest"; fi
 
       - name: Show toolchain
         run: |
