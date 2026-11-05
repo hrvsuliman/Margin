@@ -108,5 +108,7 @@ extension ModelContext {
         }
         ReminderService.scheduleRefresh(context: self)
         ConnectorSync.shared.scheduleSync(context: self)
+        CalendarSync.shared.scheduleSync(context: self)
+        SpotlightIndex.scheduleRefresh(context: self)
     }
 }

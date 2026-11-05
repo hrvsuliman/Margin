@@ -68,6 +68,8 @@ struct NoteImageRef: Equatable, Sendable {
     let url: URL
     let heightLines: Int
     let caption: String
+    /// A drawn sketch (transparent PNG): drawn straight onto the page, not glued in.
+    var isSketch = false
 }
 
 /// A structural line of the note source.
@@ -166,6 +168,7 @@ struct PlacedImage: @unchecked Sendable {
     let image: CGImage
     let rect: CGRect
     let rotation: CGFloat
+    var isSketch = false
 }
 
 /// Loads note pictures, downsized for drawing, and keeps them cached.
@@ -340,9 +343,9 @@ private final class PageWriter {
 
         var rng = SeededRandom(seed: StableHash.combine(seed, 909, StableHash.of(id.uuidString)))
         let top = settings.marginTop + CGFloat(line) * spacing + spacing * 0.35
-        let left = leftEdge + (settings.contentWidth - width) * (0.1 + 0.3 * rng.unit())
+        let left = ref.isSketch ? leftEdge + x * 0.3 : leftEdge + (settings.contentWidth - width) * (0.1 + 0.3 * rng.unit())
         placedImages.append(PlacedImage(image: image, rect: CGRect(x: left, y: top, width: width, height: height),
-                                        rotation: 0.025 * rng.signed()))
+                                        rotation: ref.isSketch ? 0 : 0.025 * rng.signed(), isSketch: ref.isSketch))
         for _ in 0..<linesNeeded { nextLine() }
         if !ref.caption.isEmpty {
             writeParagraph(normalize(ref.caption), scale: 0.85, underline: false)

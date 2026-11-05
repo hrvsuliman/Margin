@@ -42,6 +42,8 @@ struct NoteEditorView: View {
     @State private var showAssistant = false
     @State private var imageExport: ImageExport?
     @State private var classmateShare: URL?
+    @State private var sketching = false
+    @State private var showSummary = false
 
     private var myImages: [NoteImage] { noteImages.filter { $0.noteUID == document.uid } }
     @Query(sort: \NoteDocument.updatedAt, order: .reverse) private var allNotes: [NoteDocument]
@@ -123,6 +125,14 @@ struct NoteEditorView: View {
                 camera = nil
             }
             .ignoresSafeArea()
+        }
+        .sheet(isPresented: $showSummary) {
+            SummaryView(document: document)
+        }
+        .fullScreenCover(isPresented: $sketching) {
+            SketchView { image, size in
+                Task { await insertSketch(image, size: size) }
+            }
         }
         .sheet(item: $classmateShare) { url in
             ActivityView(items: [url])
@@ -369,6 +379,11 @@ struct NoteEditorView: View {
                         Label("Foto aus der Mediathek", systemImage: "text.viewfinder")
                     }
                 }
+                Button {
+                    sketching = true
+                } label: {
+                    Label("Skizze zeichnen", systemImage: "pencil.tip.crop.circle")
+                }
                 Section("Bild einkleben") {
                     if CameraPicker.isAvailable {
                         Button {
@@ -403,12 +418,23 @@ struct NoteEditorView: View {
             }
             .accessibilityLabel("Text importieren")
 
-            Button {
-                showAssistant = true
+            Menu {
+                Button {
+                    showSummary = true
+                } label: {
+                    Label("Nachbereiten: Zusammenfassung, Aufgaben, Karteikarten", systemImage: "wand.and.stars")
+                }
+                Button {
+                    showAssistant = true
+                } label: {
+                    Label("Tutor zu dieser Notiz fragen", systemImage: "bubble.left.and.text.bubble.right")
+                }
             } label: {
                 Image(systemName: "sparkles")
+            } primaryAction: {
+                showAssistant = true
             }
-            .accessibilityLabel("Claude zu dieser Notiz fragen")
+            .accessibilityLabel("KI zu dieser Notiz")
 
             Button {
                 showDetails = true
@@ -472,6 +498,24 @@ struct NoteEditorView: View {
         } catch {
             errorMessage = "Das Bild konnte nicht eingefügt werden."
         }
+    }
+
+    /// A drawn sketch becomes a picture block, as high as it needs on the page.
+    private func insertSketch(_ image: UIImage, size: CGSize) async {
+        guard let png = image.pngData(), let stored = try? AttachmentStore.store(png, fileName: "skizze.png") else {
+            errorMessage = "Die Skizze konnte nicht eingefügt werden."
+            return
+        }
+        let noteImage = NoteImage(noteUID: document.uid, storedName: stored.storedName)
+        let widthMM = max(60, 210 - document.marginLeftMM - document.marginRightMM) * 0.9
+        let aspect = max(size.width, 1) / max(size.height, 1)
+        noteImage.heightLines = min(18, max(3, Int((widthMM / aspect / max(document.lineSpacingMM, 5)).rounded(.up))))
+        noteImage.caption = ""
+        context.insert(noteImage)
+        appendToBody(NoteBlock.imageLine(noteImage.uid))
+        try? context.save()
+        mode = .pages
+        Haptics.success()
     }
 
     private func appendToBody(_ text: String) {

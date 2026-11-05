@@ -24,7 +24,13 @@ enum PageRenderer {
 
         guard let page else { return }
         for placed in page.images {
-            drawGluedImage(placed, in: context)
+            if placed.isSketch {
+                UIGraphicsPushContext(context)
+                UIImage(cgImage: placed.image).draw(in: placed.rect)
+                UIGraphicsPopContext()
+            } else {
+                drawGluedImage(placed, in: context)
+            }
         }
         let ink = UIColor(hex: settings.penColor.hex)
         context.setFillColor(ink.cgColor)

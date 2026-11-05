@@ -1,7 +1,7 @@
 import SwiftData
 import SwiftUI
 
-/// The home screen: what's on today, what's due, what's coming up.
+/// The home screen: now and next, the day as a timeline, what's due, and in the evening a look at tomorrow.
 /// Sections only appear when they have something to say.
 struct TodayView: View {
     @Environment(\.modelContext) private var context
@@ -21,6 +21,8 @@ struct TodayView: View {
     @State private var showSettings = false
     @State private var focus: FocusRequest?
     @State private var review: ReviewRequest?
+    @State private var openedSubject: SchoolSubject?
+    @State private var recap: WeeklyRecap?
 
     var body: some View {
         NavigationStack {
@@ -31,6 +33,9 @@ struct TodayView: View {
             .navigationTitle("Heute")
             .navigationDestination(for: SchoolTask.self) { task in
                 TaskDetailView(task: task)
+            }
+            .navigationDestination(item: $openedSubject) { subject in
+                SubjectDetailView(subject: subject)
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -52,6 +57,9 @@ struct TodayView: View {
             }
             .fullScreenCover(item: $focus) { FocusView(request: $0) }
             .fullScreenCover(item: $review) { FlashcardReviewView(cards: $0.cards) }
+            .sheet(isPresented: Binding(get: { recap != nil }, set: { if !$0 { recap = nil } })) {
+                if let recap { WeeklyRecapView(recap: recap) }
+            }
         }
     }
 
@@ -81,8 +89,10 @@ struct TodayView: View {
         let todayItems = agenda.items(on: now)
         let holiday = agenda.holiday(on: now)
         let todayLessons = todayItems.filter(\.isLesson)
-        let todayEvents = todayItems.filter { if case .event = $0.source { return true } else { return false } }
-        let todaySessions = todayItems.filter(\.isSession)
+        let timed = todayItems.filter { !$0.isAllDay && ($0.isLesson || $0.isSession || Self.isEvent($0)) }
+        let allDayEvents = todayItems.filter { $0.isAllDay && Self.isEvent($0) }
+        let rows = DayPlan.rows(items: timed, now: now, isToday: true)
+        let hero = todayLessons.first { !$0.isDone && $0.end > now }
         let dueCardCount = cards.filter { $0.due <= now }.count
         let _ = progress.count
         let step = subjects.isEmpty ? nil : LearningStore.nextStep(context, now: now)
@@ -90,7 +100,10 @@ struct TodayView: View {
         let upcomingExams = exams.filter {
             $0.date >= calendar.startOfDay(for: now) && calendar.daysBetween(now, $0.date) <= 28
         }
-        let next = holiday == nil ? Timetable.currentOrNextLesson(lessons: lessons, holidays: holidays, now: now) : nil
+        let next = holiday == nil && hero == nil
+            ? Timetable.currentOrNextLesson(lessons: lessons, holidays: holidays, now: now) : nil
+        let schoolOver = todayLessons.allSatisfy { $0.end <= now }
+        let tomorrow = calendar.component(.hour, from: now) >= 14 && schoolOver ? nextSchoolDay(after: now) : nil
 
         return List {
             Section {
@@ -112,7 +125,7 @@ struct TodayView: View {
                 .listRowBackground(Color.clear)
             }
 
-            let changes = (agenda.items(on: now) + agenda.items(on: calendar.addingDays(1, to: now))).filter(\.isChange)
+            let changes = (todayItems + agenda.items(on: calendar.addingDays(1, to: now))).filter(\.isChange)
             if !changes.isEmpty {
                 Section {
                     ForEach(changes) { item in
@@ -133,14 +146,16 @@ struct TodayView: View {
                 .marginRow()
             }
 
-            if let step {
+            if let hero {
+                let subject = DayPlan.subject(of: hero, in: subjects)
                 Section {
-                    NextStepCard(step: step) { perform(step.action) }
+                    Button { open(hero) } label: {
+                        NowCard(item: hero, subject: subject, now: now, badges: badges(for: hero))
+                    }
+                    .buttonStyle(.plain)
                 }
                 .marginRow()
-            }
-
-            if let next {
+            } else if let next {
                 Section {
                     nextLessonRow(next, now: now)
                 } header: {
@@ -149,13 +164,31 @@ struct TodayView: View {
                 .marginRow()
             }
 
-            if !todayLessons.isEmpty {
+            if let step {
                 Section {
-                    ForEach(todayLessons) { item in
-                        Button { sheet = EditorSheet.open(item.source) } label: { AgendaRow(item: item, now: now) }
+                    NextStepCard(step: step) { perform(step.action) }
+                }
+                .marginRow()
+            }
+
+            if !rows.isEmpty || !allDayEvents.isEmpty {
+                Section {
+                    if !allDayEvents.isEmpty {
+                        FlowChips(items: allDayEvents.map { ($0.title, $0.color) })
+                            .padding(.vertical, 6)
+                    }
+                    ForEach(rows) { row in
+                        Button {
+                            if case .item(let item) = row { open(item) }
+                        } label: {
+                            TimelineRowView(row: row, now: now, badges: badges(for: row))
+                        }
+                        .buttonStyle(.plain)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 16))
                     }
                 } header: {
-                    SectionTitle("Stundenplan", trailing: "\(todayLessons.count) Stunden")
+                    SectionTitle("Tagesablauf", trailing: todayLessons.isEmpty ? nil : "\(todayLessons.count) Stunden")
                 }
                 .marginRow()
             }
@@ -173,21 +206,40 @@ struct TodayView: View {
                 .marginRow()
             }
 
-            if !todaySessions.isEmpty || dueCardCount > 0 {
+            if dueCardCount > 0 {
                 Section {
-                    ForEach(todaySessions) { item in
-                        Button { sheet = EditorSheet.open(item.source) } label: { AgendaRow(item: item, now: now) }
+                    Button {
+                        review = ReviewRequest(cards: cards.filter { $0.due <= now }.sorted { $0.due < $1.due })
+                    } label: {
+                        Label("\(dueCardCount) Karteikarte\(dueCardCount == 1 ? "" : "n") zum Wiederholen", systemImage: "rectangle.on.rectangle.angled")
+                            .foregroundStyle(Palette.ink)
                     }
-                    if dueCardCount > 0 {
-                        Button {
-                            review = ReviewRequest(cards: cards.filter { $0.due <= now }.sorted { $0.due < $1.due })
-                        } label: {
-                            Label("\(dueCardCount) Karteikarte\(dueCardCount == 1 ? "" : "n") fällig", systemImage: "rectangle.on.rectangle.angled")
-                                .foregroundStyle(Palette.ink)
-                        }
-                    }
+                }
+                .marginRow()
+            }
+
+            if WeeklyRecap.isRecapTime(now), !subjects.isEmpty {
+                let week = WeeklyRecap.make(for: now, context: context)
+                Section {
+                    Button { recap = week } label: { WeeklyRecapCard(recap: week) }
+                        .buttonStyle(.plain)
+                }
+                .marginRow()
+            }
+
+            if let tomorrow {
+                let dayItems = agenda.items(on: tomorrow)
+                Section {
+                    TomorrowCard(
+                        day: tomorrow,
+                        lessons: dayItems.filter(\.isLesson),
+                        subjects: subjects,
+                        dueCount: tasks.filter { !$0.isDone && $0.dueDate.map { calendar.isDate($0, inSameDayAs: tomorrow) } == true }.count,
+                        exams: exams.filter { calendar.isDate($0.date, inSameDayAs: tomorrow) },
+                        now: now
+                    )
                 } header: {
-                    SectionTitle("Lernen heute")
+                    SectionTitle("Vorschau")
                 }
                 .marginRow()
             }
@@ -199,17 +251,6 @@ struct TodayView: View {
                     }
                 } header: {
                     SectionTitle("Prüfungen", trailing: "nächste 4 Wochen")
-                }
-                .marginRow()
-            }
-
-            if !todayEvents.isEmpty {
-                Section {
-                    ForEach(todayEvents) { item in
-                        Button { sheet = EditorSheet.open(item.source) } label: { AgendaRow(item: item, now: now) }
-                    }
-                } header: {
-                    SectionTitle("Termine")
                 }
                 .marginRow()
             }
@@ -228,7 +269,7 @@ struct TodayView: View {
                 .marginRow()
             }
 
-            if !subjects.isEmpty && todayLessons.isEmpty && due.isEmpty && todayEvents.isEmpty && upcomingExams.isEmpty {
+            if !subjects.isEmpty && rows.isEmpty && due.isEmpty && upcomingExams.isEmpty && tomorrow == nil {
                 Section {
                     EmptyStateView(
                         symbol: holiday == nil ? "sun.max" : "beach.umbrella",
@@ -243,14 +284,72 @@ struct TodayView: View {
         }
     }
 
+    private static func isEvent(_ item: AgendaItem) -> Bool {
+        if case .event = item.source { return true }
+        return false
+    }
+
+    /// Lessons open their subject page (pinboard, progress); everything else its editor.
+    private func open(_ item: AgendaItem) {
+        if item.isLesson, let subject = DayPlan.subject(of: item, in: subjects) {
+            openedSubject = subject
+        } else {
+            sheet = EditorSheet.open(item.source)
+        }
+    }
+
+    /// "Hausaufgabe fällig" / "Arbeit" on a lesson when something is due for that subject that day.
+    private func badges(for item: AgendaItem) -> [String] {
+        guard item.isLesson, let subject = DayPlan.subject(of: item, in: subjects) else { return [] }
+        let calendar = Calendar.school
+        var result: [String] = []
+        if exams.contains(where: { $0.subject?.uid == subject.uid && calendar.isDate($0.date, inSameDayAs: item.start) }) {
+            result.append("Arbeit")
+        }
+        if tasks.contains(where: { task in
+            !task.isDone && task.subject?.uid == subject.uid
+                && task.dueDate.map { calendar.isDate($0, inSameDayAs: item.start) } == true
+        }) {
+            result.append("Hausaufgabe fällig")
+        }
+        return result
+    }
+
+    private func badges(for row: DayPlan.Row) -> [String] {
+        if case .item(let item) = row { return badges(for: item) }
+        return []
+    }
+
+    /// The next day (within a week) that has lessons.
+    private func nextSchoolDay(after now: Date) -> Date? {
+        let calendar = Calendar.school
+        for offset in 1...7 {
+            let day = calendar.addingDays(offset, to: calendar.startOfDay(for: now))
+            if agenda.items(on: day).contains(where: \.isLesson) { return day }
+        }
+        return nil
+    }
+
     private func header(now: Date, holiday: Holiday?, lessonCount: Int, dueCount: Int) -> some View {
         VStack(alignment: .leading, spacing: 4) {
+            Text(greeting(now))
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Palette.marginRed)
             Text(Fmt.longDay(now))
                 .font(.system(.title2, design: .serif, weight: .semibold))
                 .foregroundStyle(Palette.ink)
             Text(summary(holiday: holiday, lessonCount: lessonCount, dueCount: dueCount, now: now))
                 .font(.subheadline)
                 .foregroundStyle(Palette.secondaryInk)
+        }
+    }
+
+    private func greeting(_ now: Date) -> String {
+        switch Calendar.school.component(.hour, from: now) {
+        case 5..<11: "Guten Morgen"
+        case 11..<17: "Hallo"
+        case 17..<23: "Guten Abend"
+        default: "Gute Nacht"
         }
     }
 

@@ -39,6 +39,11 @@ struct SettingsView: View {
                 } label: {
                     LabeledContent("Stundenplan verbinden", value: SchoolSync.shared.source.title)
                 }
+                NavigationLink {
+                    IntegrationSettingsView()
+                } label: {
+                    LabeledContent("Kalender und iPhone-Suche", value: CalendarSync.shared.isEnabled ? "Kalender an" : "")
+                }
                 Picker("Notenskala", selection: $settings.gradeScale) {
                     ForEach(GradeScale.allCases) { Text($0.title).tag($0) }
                 }

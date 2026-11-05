@@ -25,7 +25,8 @@ enum NoteRendering {
         var refs: [UUID: NoteImageRef] = [:]
         for image in images where image.noteUID == document.uid {
             refs[image.uid] = NoteImageRef(url: AttachmentStore.directory.appendingPathComponent(image.storedName),
-                                           heightLines: image.heightLines, caption: image.caption)
+                                           heightLines: image.heightLines, caption: image.caption,
+                                           isSketch: image.storedName.lowercased().hasSuffix(".png"))
         }
         return NoteContent(
             title: document.title,
