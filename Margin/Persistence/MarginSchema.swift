@@ -76,6 +76,8 @@ enum MarginMigrationPlan: SchemaMigrationPlan {
 
 @MainActor
 enum Persistence {
+    nonisolated static let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+
     static let schema = Schema(versionedSchema: MarginSchemaV5.self)
 
     /// The app's database, stored on the device only.
@@ -108,6 +110,8 @@ extension ModelContext {
         }
         ReminderService.scheduleRefresh(context: self)
         ConnectorSync.shared.scheduleSync(context: self)
+        // Delayed system updates would outlive a test's temporary database, so not during unit tests.
+        guard !Persistence.isRunningTests else { return }
         CalendarSync.shared.scheduleSync(context: self)
         SpotlightIndex.scheduleRefresh(context: self)
         WidgetBridge.scheduleRefresh(context: self)

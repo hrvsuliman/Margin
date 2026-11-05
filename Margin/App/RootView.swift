@@ -14,6 +14,8 @@ struct RootView: View {
     @State private var incoming: IncomingFile?
     @State private var routedSheet: EditorSheet?
     @State private var routedSubject: SchoolSubject?
+    @AppStorage("onboarding.done") private var onboardingDone = false
+    @State private var showOnboarding = false
 
     var body: some View {
         TabView(selection: $tab) {
@@ -33,12 +35,18 @@ struct RootView: View {
                 .tabItem { Label("Tutor", systemImage: "sparkles") }
                 .tag(AppTab.tutor)
         }
+        .modifier(SidebarOnIPad())
         .onChange(of: tab) { Haptics.selection() }
         .onAppear {
             guard !didLaunch else { return }
             didLaunch = true
             AttachmentStore.removeOrphanedFiles(context: context)
+            // First launch only; people updating from an older version already know the app.
+            let isNew = ((try? context.fetchCount(FetchDescriptor<SchoolSubject>())) ?? 0) == 0
+            if !onboardingDone && isNew { showOnboarding = true }
+            onboardingDone = true
         }
+        .fullScreenCover(isPresented: $showOnboarding) { OnboardingView() }
         .onChange(of: scenePhase, initial: true) {
             switch scenePhase {
             case .active:
@@ -108,6 +116,17 @@ struct RootView: View {
             }
         case .subject(let id):
             routedSubject = ((try? context.fetch(FetchDescriptor<SchoolSubject>())) ?? []).first { $0.uid == id }
+        }
+    }
+}
+
+/// On iPad (iOS 18 and newer) the tabs can turn into a sidebar.
+private struct SidebarOnIPad: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.tabViewStyle(.sidebarAdaptable)
+        } else {
+            content
         }
     }
 }
