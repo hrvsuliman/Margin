@@ -110,5 +110,6 @@ extension ModelContext {
         ConnectorSync.shared.scheduleSync(context: self)
         CalendarSync.shared.scheduleSync(context: self)
         SpotlightIndex.scheduleRefresh(context: self)
+        WidgetBridge.scheduleRefresh(context: self)
     }
 }

@@ -49,6 +49,7 @@ struct RootView: View {
                 SpotlightIndex.scheduleRefresh(context: context)
                 if UserDefaults.standard.bool(forKey: "intent.startFocus") { tab = .learn }
             case .background:
+                WidgetBridge.refresh(context: context)
                 AutoBackup.runIfDue(context: context)
                 BackgroundRefresh.schedule()
             default:

@@ -26,6 +26,15 @@ targets:
     type: application
     platform: iOS
     sources: [Margin]
+    dependencies:
+      - target: MarginWidgets
+        embed: true
+    # Shared folder for the widgets. Sideloading may not grant it on a free Apple ID;
+    # the widgets then show "Öffne Margin" instead of data.
+    entitlements:
+      path: Config/Margin.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.hrvsuliman.margin]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hrvsuliman.margin
@@ -51,6 +60,30 @@ targets:
     scheme:
       testTargets:
         - MarginTests
+
+  MarginWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Widgets
+      - Margin/Shared/WidgetSnapshot.swift
+      - Margin/DesignSystem/Palette.swift
+    entitlements:
+      path: Config/MarginWidgets.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.hrvsuliman.margin]
+    info:
+      path: Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: Margin
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hrvsuliman.margin.widgets
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
 
   MarginTests:
     type: bundle.unit-test

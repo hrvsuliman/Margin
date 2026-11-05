@@ -95,6 +95,19 @@ jobs:
           echo "App bundle contents:"
           ls -la "$APP"
 
+      - name: Embed entitlements (ad-hoc signature)
+        # Unsigned builds carry no entitlements. Sideloadly re-signs the app with your Apple ID
+        # and reads these to know what the app needs (the App Group shared with the widgets).
+        run: |
+          APP=build/Build/Products/Release-iphoneos/Margin.app
+          for EXT in "$APP"/PlugIns/*.appex; do
+            [ -d "$EXT" ] || continue
+            echo "Widget extension: $(basename "$EXT")"
+            codesign --force --sign - --entitlements Config/MarginWidgets.entitlements "$EXT"
+          done
+          codesign --force --sign - --entitlements Config/Margin.entitlements "$APP"
+          codesign -d --entitlements - "$APP" 2>/dev/null | tail -20 || true
+
       - name: Package .ipa
         id: package
         run: |

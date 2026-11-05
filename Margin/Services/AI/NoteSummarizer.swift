@@ -5,6 +5,7 @@ import FoundationModels
 
 /// Turns a long note or lesson transcript into a short summary, a to-do list and
 /// flashcards, written in Margin's note markup so it can be appended to the note.
+@MainActor
 enum NoteSummarizer {
     enum Engine: String, CaseIterable, Identifiable {
         case claude, onDevice
@@ -76,7 +77,7 @@ enum NoteSummarizer {
     }
 
     /// The open to-dos ("- [ ] …") of the "## Aufgaben" section.
-    static func todos(in summary: String) -> [String] {
+    nonisolated static func todos(in summary: String) -> [String] {
         var inTasks = false
         var result: [String] = []
         for raw in summary.components(separatedBy: .newlines) {
