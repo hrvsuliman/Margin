@@ -11,7 +11,7 @@ import 'handwriting_screen.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
-const appVersion = '0.2.0';
+const appVersion = '0.3.0';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -95,7 +95,7 @@ class SettingsScreen extends StatelessWidget {
                   title: const Text('Handschrift'),
                   subtitle: Text(
                     Services.handwriting.profiles.isEmpty
-                        ? 'Noch keine – aus einem iPhone-Backup laden'
+                        ? 'Noch keine – mit dem Stift schreiben oder vom iPhone laden'
                         : Services.handwriting.profiles.map((p) => p.displayName).join(', '),
                   ),
                   trailing: Icon(Icons.chevron_right, color: context.colors.faintInk),
@@ -124,7 +124,7 @@ class SettingsScreen extends StatelessWidget {
                   leading: const Icon(Icons.info_outline),
                   title: Text('Margin $appVersion für ${Platform.isWindows ? 'Windows' : 'Android'}'),
                   subtitle: Text(
-                    'Fächer mit Pinnwand, Aufgaben, Hausaufgaben-Foto, Prüfungen, Notizen in deiner Handschrift mit PDF. '
+                    'Fächer mit Pinnwand, Aufgaben, Hausaufgaben-Foto, Prüfungen, Notizen in deiner Handschrift (mit dem Stift geschrieben oder vom iPhone) mit Vorlagen, Unterseiten, Links, Karteikarten-Zeilen und PDF. '
                     'Kalender, Karteikarten und Fokus-Timer folgen in den nächsten Stufen.',
                     style: secondary,
                   ),

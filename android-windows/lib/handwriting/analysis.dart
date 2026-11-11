@@ -16,6 +16,31 @@ abstract final class HandwritingCharset {
 
   static final all = [...lowercase, ...uppercase, ...digits, ...punctuation];
 
+  static final groups = <(String, List<String>)>[
+    ('Kleinbuchstaben', lowercase),
+    ('Großbuchstaben', uppercase),
+    ('Ziffern', digits),
+    ('Satzzeichen', punctuation),
+  ];
+
+  /// The most frequent German letters. Writing extra versions of these makes
+  /// repeated text look the least mechanical.
+  static final variantLetters = _chars('enisratdhulcgmo');
+
+  /// Written once to measure the natural gap between letters.
+  static const sampleWord = 'Handschrift';
+
+  /// Hint shown while writing a character.
+  static String hint(String character) {
+    if (xHeightLetters.contains(character)) return 'Von der Grundlinie bis zur gestrichelten Linie.';
+    if (capitalLetters.contains(character)) return 'Großbuchstabe: bis zur oberen Linie.';
+    if (digits.contains(character)) return 'Ziffer: etwa so hoch wie ein Großbuchstabe.';
+    if ('gjpqy'.contains(character)) return 'Unterlänge: unter die Grundlinie.';
+    if ('bdfhklt'.contains(character)) return 'Oberlänge: über die gestrichelte Linie.';
+    if (punctuation.contains(character)) return 'So groß und so hoch, wie du es im Text schreibst.';
+    return 'Schreib so, wie du es auch im Heft schreibst.';
+  }
+
   /// Letters that sit between baseline and x-height line.
   static final xHeightLetters = _chars('acemnorsuvwxz').toSet();
 
@@ -185,6 +210,25 @@ class HandwritingAnalysis {
     }
     if (totalLength <= 0) return 0;
     return weighted / totalLength * 180 / math.pi;
+  }
+
+  /// Letter gap measured from the sample word, in x-heights. Null if a letter
+  /// of the word hasn't been written yet.
+  static double? letterSpacing(String word, List<Stroke> written, Map<String, List<GlyphInput>> glyphs) {
+    final analysis = analyze(glyphs);
+    final wordBounds = GlyphBounds.of(written);
+    if (wordBounds == null) return null;
+    final letters = _chars(word);
+    if (letters.length <= 1) return null;
+    var glyphWidths = 0.0;
+    for (final letter in letters) {
+      final list = glyphs[letter];
+      final bounds = list == null || list.isEmpty ? null : list.first.bounds;
+      if (bounds == null) return null;
+      glyphWidths += bounds.width * list!.first.scale;
+    }
+    final gap = (wordBounds.width - glyphWidths) / (letters.length - 1) * analysis.scaleCorrection;
+    return gap.clamp(0.02, 0.9);
   }
 
   static double? median(List<double> values) {

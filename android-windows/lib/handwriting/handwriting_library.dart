@@ -2,11 +2,14 @@
 // large for v1), so they come from an iPhone backup file instead, which has
 // them as `profiles` and `glyphs` (BackupFile.ProfileDTO / GlyphDTO).
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../data/dates.dart';
+import '../data/store.dart';
 import 'analysis.dart';
 import 'geometry.dart';
 import 'handwriting_font.dart';
@@ -24,6 +27,18 @@ extension type HandwritingProfile(Map<String, dynamic> data) {
   double get variation => _number('variation', 1);
 
   String get displayName => name.trim().isEmpty ? 'Handschrift' : name.trim();
+  bool get spacingMeasured => data['spacingMeasured'] == true;
+}
+
+/// One written version of one character, as the iPhone's `GlyphDTO`.
+extension type GlyphSample(Map<String, dynamic> data) {
+  String get uid => data['uid'] as String? ?? '';
+  String get character => data['character'] as String? ?? '';
+
+  /// Base64 of the binary glyph format.
+  String get strokes => data['strokes'] as String? ?? '';
+  double get scale => (data['scale'] as num?)?.toDouble() ?? 1;
+  double get baselineOffset => (data['baselineOffset'] as num?)?.toDouble() ?? 0;
 }
 
 /// What a backup import brought in.
@@ -93,12 +108,120 @@ class HandwritingLibrary extends ChangeNotifier {
   /// The note's own profile, otherwise the default one (NoteRendering.profile).
   HandwritingProfile? profileFor(String? noteProfile) => profile(noteProfile) ?? defaultProfile;
 
-  List<Map<String, dynamic>> _glyphsOf(String profileUid) =>
-      _glyphs.where((g) => g['profile'] == profileUid).toList()
-        ..sort((a, b) => (a['createdAt'] as String? ?? '').compareTo(b['createdAt'] as String? ?? ''));
+  /// Oldest first; samples from the same second keep the order they were added in.
+  List<Map<String, dynamic>> _glyphsOf(String profileUid) {
+    final indexed = [
+      for (var i = 0; i < _glyphs.length; i++)
+        if (_glyphs[i]['profile'] == profileUid) (i, _glyphs[i]),
+    ];
+    indexed.sort((a, b) {
+      final byDate = (a.$2['createdAt'] as String? ?? '').compareTo(b.$2['createdAt'] as String? ?? '');
+      return byDate != 0 ? byDate : a.$1.compareTo(b.$1);
+    });
+    return [for (final entry in indexed) entry.$2];
+  }
+
+  /// Characters written in this profile.
+  Set<String> capturedCharacters(String profileUid) =>
+      {for (final g in _glyphsOf(profileUid)) if (g['character'] is String) g['character'] as String};
 
   /// Characters written in this profile (each counted once).
-  int characterCount(String profileUid) => _glyphsOf(profileUid).map((g) => g['character']).toSet().length;
+  int characterCount(String profileUid) => capturedCharacters(profileUid).length;
+
+  /// All written samples of a profile.
+  int sampleCount(String profileUid) => _glyphsOf(profileUid).length;
+
+  /// The written versions of one character, oldest first.
+  List<GlyphSample> samples(String profileUid, String character) =>
+      [for (final g in _glyphsOf(profileUid)) if (g['character'] == character) GlyphSample(g)];
+
+  /// A sample as the font engine uses it.
+  static GlyphInput input(GlyphSample sample) {
+    final geometry = GlyphStrokes.decodeBase64(sample.strokes);
+    return GlyphInput(
+      uid: sample.uid,
+      strokes: geometry.strokes,
+      outlines: geometry.outlines,
+      scale: sample.scale,
+      baselineOffset: sample.baselineOffset,
+    );
+  }
+
+  // ------------------------------------------------------------ writing with the pen
+
+  /// A new, empty profile. The first one becomes the default.
+  HandwritingProfile createProfile(String name) {
+    final profile = <String, dynamic>{
+      'uid': newUid(),
+      'name': name,
+      'isDefault': _profiles.isEmpty,
+      'createdAt': isoDate(DateTime.now()),
+      'letterSpacing': 0.14,
+      'wordSpacing': 0.75,
+      'slantAdjust': 0.0,
+      'variation': 1.0,
+      'spacingMeasured': false,
+    };
+    _profiles.add(profile);
+    _changed();
+    return HandwritingProfile(profile);
+  }
+
+  /// Stores a written character (finger/pen strokes, glyph format version 1).
+  GlyphSample addGlyph(String profileUid, String character, List<Stroke> strokes) {
+    final glyph = <String, dynamic>{
+      'uid': newUid(),
+      'character': character,
+      'strokes': base64Encode(GlyphStrokes.encode(strokes)),
+      'createdAt': isoDate(DateTime.now()),
+      'scale': 1.0,
+      'baselineOffset': 0.0,
+      'profile': profileUid,
+    };
+    _glyphs.add(glyph);
+    _changed();
+    return GlyphSample(glyph);
+  }
+
+  void updateGlyph(String uid, {double? scale, double? baselineOffset}) {
+    for (final g in _glyphs) {
+      if (g['uid'] != uid) continue;
+      if (scale != null) g['scale'] = scale;
+      if (baselineOffset != null) g['baselineOffset'] = baselineOffset;
+    }
+    _changed();
+  }
+
+  void deleteGlyph(String uid) {
+    _glyphs.removeWhere((g) => g['uid'] == uid);
+    _changed();
+  }
+
+  /// Changes profile fields (name, letterSpacing, wordSpacing, slantAdjust, variation, spacingMeasured).
+  void updateProfile(String uid, Map<String, Object?> changes) {
+    for (final p in _profiles) {
+      if (p['uid'] == uid) p.addAll(changes);
+    }
+    _changed();
+  }
+
+  /// Measures the letter gap from the written sample word and keeps it.
+  /// Returns the gap, or null if a letter of the word isn't written yet.
+  double? measureSpacing(String profileUid, String word, List<Stroke> written) {
+    final gap = HandwritingAnalysis.letterSpacing(word, written, source(profileUid).glyphs);
+    if (gap != null) updateProfile(profileUid, {'letterSpacing': gap, 'spacingMeasured': true});
+    return gap;
+  }
+
+  /// Brings unusually big or small samples in line with the others.
+  void fixOutliers(List<Outlier> outliers) {
+    for (final outlier in outliers) {
+      for (final g in _glyphs) {
+        if (g['uid'] == outlier.glyphUid) g['scale'] = outlier.suggestedScale.clamp(0.5, 1.8);
+      }
+    }
+    _changed();
+  }
 
   FontSource source(String profileUid) {
     final profile = this.profile(profileUid);
@@ -179,18 +302,25 @@ class HandwritingLibrary extends ChangeNotifier {
     _changed();
   }
 
+  Timer? _saveTimer;
+
   void _changed() {
     _fonts.clear();
     notifyListeners();
-    save();
+    // Sliders change values many times a second: write once things settle.
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 500), save);
   }
 
   Future<void> _saving = Future.value();
 
-  /// Writes the file. Writes never overlap.
-  Future<void> save() => _saving = _saving.then((_) => _write()).catchError((Object error) {
-        debugPrint('Margin: saving handwriting failed: $error');
-      });
+  /// Writes the file now. Writes never overlap.
+  Future<void> save() {
+    _saveTimer?.cancel();
+    return _saving = _saving.then((_) => _write()).catchError((Object error) {
+      debugPrint('Margin: saving handwriting failed: $error');
+    });
+  }
 
   Future<void> _write() async {
     final target = file;

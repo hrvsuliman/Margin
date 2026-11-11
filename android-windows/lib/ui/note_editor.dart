@@ -9,6 +9,8 @@ import '../handwriting/handwriting_library.dart';
 import '../handwriting/note_layout.dart';
 import '../handwriting/note_rendering.dart';
 import '../handwriting/page_painter.dart';
+import '../logic/markup_editing.dart';
+import '../logic/note_pages.dart';
 import 'handwriting_screen.dart';
 import 'notes_screen.dart';
 import 'theme.dart';
@@ -27,6 +29,8 @@ class NoteEditorScreen extends StatefulWidget {
 class _NoteEditorScreenState extends State<NoteEditorScreen> {
   late final TextEditingController _title;
   late final TextEditingController _body;
+  late final String _initialBody;
+  final _bodyFocus = FocusNode();
   Timer? _saveTimer;
   Timer? _layoutTimer;
   List<LaidOutPage> _pages = const [];
@@ -41,6 +45,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     final note = _note;
     _title = TextEditingController(text: note?.title ?? '');
     _body = TextEditingController(text: note?.body ?? '');
+    _initialBody = _body.text;
     Services.store.addListener(_dataChanged);
     Services.handwriting.addListener(_relayoutNow);
     _relayoutNow();
@@ -52,9 +57,18 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     _layoutTimer?.cancel();
     Services.store.removeListener(_dataChanged);
     Services.handwriting.removeListener(_relayoutNow);
-    _saveNow();
+    // Save after the tree has settled (saving notifies other widgets).
+    final uid = widget.noteUid, title = _title.text, body = _body.text;
+    final edited = body != _initialBody;
+    Future.microtask(() {
+      _save(uid, title, body);
+      // "Begriff :: Erklärung" lines become flashcards when leaving a note that was edited here.
+      final note = store.note(uid);
+      if (note != null && edited) store.syncCards(note);
+    });
     _title.dispose();
     _body.dispose();
+    _bodyFocus.dispose();
     super.dispose();
   }
 
@@ -88,12 +102,14 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     _layoutTimer = Timer(const Duration(milliseconds: 250), _relayoutNow);
   }
 
-  void _saveNow() {
-    final note = _note;
-    if (note == null || (note.title == _title.text && note.body == _body.text)) return;
+  void _saveNow() => _save(widget.noteUid, _title.text, _body.text);
+
+  static void _save(String uid, String title, String body) {
+    final note = store.note(uid);
+    if (note == null || (note.title == title && note.body == body)) return;
     store.update(note.rec, (d) {
-      d['title'] = _title.text;
-      d['body'] = _body.text;
+      d['title'] = title;
+      d['body'] = body;
       d['updatedAt'] = isoDate(DateTime.now());
     });
   }
@@ -134,7 +150,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       ),
     ];
 
-    final editor = _TextPane(title: _title, body: _body, onChanged: _textChanged);
+    final editor = _TextPane(noteUid: note.uid, title: _title, body: _body, bodyFocus: _bodyFocus, onChanged: _textChanged);
     final pages = _PagesPane(pages: _pages, settings: _settings);
 
     if (wide) {
@@ -165,10 +181,40 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
 }
 
 class _TextPane extends StatelessWidget {
-  const _TextPane({required this.title, required this.body, required this.onChanged});
+  const _TextPane({
+    required this.noteUid,
+    required this.title,
+    required this.body,
+    required this.bodyFocus,
+    required this.onChanged,
+  });
+  final String noteUid;
   final TextEditingController title;
   final TextEditingController body;
+  final FocusNode bodyFocus;
   final VoidCallback onChanged;
+
+  /// Runs a formatting operation on the text at the cursor (or at the end).
+  void _edit(TextEdit Function(String text, int start, int end) change) {
+    final value = body.value;
+    final selection = value.selection;
+    final edit = change(value.text, selection.isValid ? selection.start : -1, selection.isValid ? selection.end : -1);
+    body.value = TextEditingValue(text: edit.text, selection: TextSelection.collapsed(offset: edit.caret));
+    bodyFocus.requestFocus();
+    onChanged();
+  }
+
+  void _style(LineStyle style) => _edit((text, start, end) {
+        final at = start < 0 ? text.length : start;
+        return MarkupEditing.apply(style, text, at, end < 0 ? at : end);
+      });
+
+  void _checkbox() => _edit((text, start, end) {
+        final at = start < 0 ? text.length : start;
+        return MarkupEditing.toggleCheckbox(text, at, end < 0 ? at : end);
+      });
+
+  void _insert(String insertion) => _edit((text, start, end) => MarkupEditing.insert(insertion, text, start, end));
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -183,10 +229,14 @@ class _TextPane extends StatelessWidget {
               decoration: const InputDecoration(hintText: 'Titel', border: InputBorder.none, filled: false),
               textInputAction: TextInputAction.next,
             ),
-            const SizedBox(height: 4),
+            _PagesBar(noteUid: noteUid),
+            _FormatBar(noteUid: noteUid, onStyle: _style, onCheckbox: _checkbox, onInsert: _insert),
+            Divider(height: 1, color: context.colors.ruling),
+            const SizedBox(height: 6),
             Expanded(
               child: TextField(
                 controller: body,
+                focusNode: bodyFocus,
                 onChanged: (_) => onChanged(),
                 maxLines: null,
                 expands: true,
@@ -195,7 +245,7 @@ class _TextPane extends StatelessWidget {
                 style: const TextStyle(fontSize: 16, height: 1.5),
                 decoration: InputDecoration(
                   hintText: 'Schreib los …\n\n# Überschrift\n## Zwischenüberschrift\n- Liste\n- [ ] Checkliste\n'
-                      '> Merkkasten\n| Tabelle | Spalte |\n---\nBegriff :: Erklärung (wird eine Karteikarte)',
+                      '> Merkkasten\n| Tabelle | Spalte |\n---\n[[Andere Notiz]]\nBegriff :: Erklärung (wird eine Karteikarte)',
                   hintStyle: TextStyle(color: context.colors.faintInk),
                   border: InputBorder.none,
                   filled: false,
@@ -205,6 +255,102 @@ class _TextPane extends StatelessWidget {
           ],
         ),
       );
+}
+
+/// Heading, list, checklist and the "+" insertions (iPhone: keyboard bar).
+class _FormatBar extends StatelessWidget {
+  const _FormatBar({required this.noteUid, required this.onStyle, required this.onCheckbox, required this.onInsert});
+  final String noteUid;
+  final ValueChanged<LineStyle> onStyle;
+  final VoidCallback onCheckbox;
+  final ValueChanged<String> onInsert;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget button(String tooltip, IconData icon, VoidCallback onPressed) => IconButton(
+          tooltip: tooltip,
+          icon: Icon(icon, size: 20),
+          visualDensity: VisualDensity.compact,
+          onPressed: onPressed,
+        );
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        button('Überschrift', Icons.title, () => onStyle(LineStyle.heading)),
+        button('Zwischenüberschrift', Icons.text_fields, () => onStyle(LineStyle.subheading)),
+        button('Liste', Icons.format_list_bulleted, () => onStyle(LineStyle.bullet)),
+        button('Checkliste (noch mal tippen zum Abhaken)', Icons.checklist, onCheckbox),
+        button('Merkkasten', Icons.format_quote, () => onStyle(LineStyle.callout)),
+        button('Tabelle', Icons.table_chart_outlined, () => onInsert('| Spalte | Spalte |\n|---|---|\n| | |\n')),
+        button('Trennlinie', Icons.horizontal_rule, () => onInsert('---\n')),
+        button('Normaler Text', Icons.format_clear, () => onStyle(LineStyle.plain)),
+        PopupMenuButton<String>(
+          tooltip: 'Link zu Notiz',
+          icon: const Icon(Icons.link, size: 20),
+          onSelected: (title) => onInsert('[[$title]]'),
+          itemBuilder: (_) => [
+            for (final note in store.notes.where((n) => n.uid != noteUid && n.title.trim().isNotEmpty).take(30))
+              PopupMenuItem(value: note.title.trim(), child: Text(note.title.trim())),
+            const PopupMenuItem(value: 'Neue Seite', child: Text('Neue Seite …')),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Parent, subpages, links and backlinks of a note, as chips above the text.
+class _PagesBar extends StatelessWidget {
+  const _PagesBar({required this.noteUid});
+  final String noteUid;
+
+  @override
+  Widget build(BuildContext context) => StoreBuilder(builder: (context, store) {
+        final note = store.note(noteUid);
+        if (note == null) return const SizedBox();
+        final parent = store.parentOf(noteUid);
+        final children = store.childrenOf(noteUid);
+        final linked = store.linkedFrom(note);
+        final missing = store.missingLinks(note);
+        final backlinks = store.backlinksTo(note);
+        final dashed = BorderSide(color: context.colors.ruling);
+        Widget chip(Note other, IconData icon) => ActionChip(
+              avatar: Icon(icon, size: 16),
+              label: Text(other.displayTitle, overflow: TextOverflow.ellipsis),
+              onPressed: () => openNote(context, other.uid),
+            );
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Wrap(spacing: 6, runSpacing: 6, children: [
+            if (parent != null) chip(parent, Icons.arrow_upward),
+            for (final child in children) chip(child, Icons.description_outlined),
+            for (final other in linked) chip(other, Icons.link),
+            for (final title in missing)
+              ActionChip(
+                avatar: const Icon(Icons.add, size: 16),
+                side: dashed,
+                label: Text(title, overflow: TextOverflow.ellipsis),
+                tooltip: 'Legt die verlinkte Seite an',
+                onPressed: () => openNote(context, store.addSubpage(noteUid, title: title).uid),
+              ),
+            if (backlinks.isNotEmpty)
+              PopupMenuButton<String>(
+                tooltip: 'Erwähnt in',
+                onSelected: (uid) => openNote(context, uid),
+                itemBuilder: (_) => [
+                  for (final other in backlinks) PopupMenuItem(value: other.uid, child: Text(other.displayTitle)),
+                ],
+                child: Chip(avatar: const Icon(Icons.undo, size: 16), label: Text('Erwähnt in ${backlinks.length}')),
+              ),
+            ActionChip(
+              avatar: const Icon(Icons.add, size: 16),
+              side: dashed,
+              label: const Text('Unterseite'),
+              onPressed: () => openNote(context, store.addSubpage(noteUid).uid),
+            ),
+          ]),
+        );
+      });
 }
 
 class _PagesPane extends StatelessWidget {
@@ -409,7 +555,42 @@ class _NoteSettings extends StatelessWidget {
               ]),
               const SectionTitle('Zuordnung'),
               Group(padding: const EdgeInsets.all(12), children: [
-                SubjectField(value: note.subject, onChanged: (v) => put('subject', v)),
+                SubjectField(
+                  value: note.subject,
+                  onChanged: (v) => store.update(note.rec, (data) {
+                    data['subject'] = v;
+                    data['topic'] = null;
+                  }),
+                ),
+                if (note.subject != null)
+                  DropdownButtonFormField<String?>(
+                    initialValue: store.topicsOf(note.subject!).any((t) => t.uid == note.topic) ? note.topic : null,
+                    decoration: const InputDecoration(labelText: 'Thema'),
+                    items: [
+                      const DropdownMenuItem<String?>(value: null, child: Text('Kein Thema')),
+                      for (final topic in store.topicsOf(note.subject!))
+                        DropdownMenuItem<String?>(value: topic.uid, child: Text(topic.title)),
+                    ],
+                    onChanged: (v) => put('topic', v),
+                  ),
+                DropdownButtonFormField<String?>(
+                  initialValue: store.exams.any((e) => e.uid == note.exam) ? note.exam : null,
+                  decoration: const InputDecoration(labelText: 'Prüfung'),
+                  items: [
+                    const DropdownMenuItem<String?>(value: null, child: Text('Keine Prüfung')),
+                    for (final exam in store.exams)
+                      DropdownMenuItem<String?>(
+                        value: exam.uid,
+                        child: Text('${store.examTitle(exam)} · ${Fmt.dayMonth(exam.date)}', overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: (v) => put('exam', v),
+                ),
+                TextFormField(
+                  initialValue: note.folder,
+                  decoration: const InputDecoration(labelText: 'Ordner'),
+                  onChanged: (v) => put('folder', v.trim()),
+                ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Datum'),

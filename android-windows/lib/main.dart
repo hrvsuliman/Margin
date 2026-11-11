@@ -8,6 +8,8 @@ import 'data/store.dart';
 import 'handwriting/handwriting_library.dart';
 import 'sync/sync_client.dart';
 import 'ui/home.dart';
+import 'ui/notes_screen.dart';
+import 'ui/pinboard.dart';
 import 'ui/theme.dart';
 import 'ui/widgets.dart';
 
@@ -18,6 +20,8 @@ Future<void> main() async {
   Services.sync = SyncClient(Services.store, File('${folder.path}${Platform.pathSeparator}sync.json'));
   await Services.sync.load();
   Services.handwriting = await HandwritingLibrary.load(File('${folder.path}${Platform.pathSeparator}handwriting.json'));
+  // Notes pinned to a subject open in the handwriting editor.
+  openNoteFromPin = openNote;
   runApp(const MarginApp());
 }
 
@@ -44,7 +48,10 @@ class _MarginAppState extends State<MarginApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Save right away when the app goes to the background, sync when it comes back.
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) Services.store.flush();
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      Services.store.flush();
+      Services.handwriting.save();
+    }
     if (state == AppLifecycleState.resumed) Services.sync.syncNow();
   }
 

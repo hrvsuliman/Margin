@@ -1,7 +1,7 @@
 name: margin
 description: Margin für Android und Windows – Schule, Notizen, Lernen. Gleicher Datenstand wie auf dem iPhone.
 publish_to: none
-version: 0.2.0+1
+version: 0.3.0+1
 
 environment:
   sdk: ^3.12.0

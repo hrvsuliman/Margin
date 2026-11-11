@@ -6,17 +6,24 @@ import '../handwriting/analysis.dart';
 import '../handwriting/handwriting_library.dart';
 import '../handwriting/note_layout.dart';
 import '../handwriting/page_painter.dart';
+import 'handwriting_capture.dart';
+import 'handwriting_profile.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
-/// Handwriting profiles on this device. They are written on the iPhone (pen and
-/// paper) and come here through an iPhone backup file.
+/// Handwriting profiles on this device: written here with the pen, or taken
+/// from an iPhone backup file.
 class HandwritingScreen extends StatelessWidget {
   const HandwritingScreen({super.key});
 
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Handschrift')),
+        floatingActionButton: FloatingActionButton.extended(
+          icon: const Icon(Icons.edit_outlined),
+          label: const Text('Neue Handschrift'),
+          onPressed: () => newProfile(context),
+        ),
         body: ListenableBuilder(
           listenable: Services.handwriting,
           builder: (context, _) {
@@ -28,9 +35,10 @@ class HandwritingScreen extends StatelessWidget {
               const SizedBox(height: 8),
               Group(padding: const EdgeInsets.all(16), children: [
                 Text(
-                  'Deine Handschrift richtest du auf dem iPhone ein: Vorlage drucken, mit Stift ausfüllen, fotografieren. '
-                  'Sichere dann dort ein Backup (Einstellungen › Backup sichern) oder nimm das automatische Backup '
-                  'aus OneDrive/iCloud Drive – und lade die Datei hier.',
+                  'Schreib jeden Buchstaben einmal mit dem Stift – Margin setzt deine Notizen dann in deiner Schrift. '
+                  'Hast du deine Handschrift schon auf dem iPhone? Sichere dort ein Backup (Einstellungen › Backup sichern) '
+                  'oder nimm das automatische Backup aus OneDrive/iCloud Drive – und lade die Datei hier. '
+                  'Handschriftproben bleiben auf diesem Gerät.',
                   style: secondary,
                 ),
                 Padding(
@@ -46,10 +54,12 @@ class HandwritingScreen extends StatelessWidget {
                 ),
               ]),
               if (profiles.isEmpty)
-                const EmptyState(
+                EmptyState(
                   icon: Icons.draw_outlined,
                   title: 'Noch keine Handschrift',
                   message: 'Bis dahin erscheinen Notizen in Druckschrift.',
+                  action: 'Mit dem Stift schreiben',
+                  onAction: () => newProfile(context),
                 )
               else ...[
                 const SectionTitle('Profile'),
@@ -78,14 +88,21 @@ class _ProfileCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ListTile(
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileDetailScreen(profileUid: profile.uid))),
             title: Text(profile.displayName, style: const TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Text(['$count von $total Zeichen', if (isDefault) 'Standard'].join(' · ')),
+            subtitle: Text([
+              '$count von $total Zeichen',
+              '${library.sampleCount(profile.uid)} Proben',
+              if (isDefault) 'Standard',
+            ].join(' · ')),
             trailing: PopupMenuButton<String>(
               tooltip: 'Mehr',
               onSelected: (action) async {
                 switch (action) {
                   case 'default':
                     library.setDefault(profile.uid);
+                  case 'write':
+                    await startCapture(context, profile.uid, CaptureSessions.missing(library, profile), title: 'Zeichen schreiben');
                   case 'rename':
                     final name = await askText(context, 'Umbenennen', initial: profile.name, action: 'Sichern');
                     if (name != null && name.trim().isNotEmpty) library.rename(profile.uid, name.trim());
@@ -97,6 +114,7 @@ class _ProfileCard extends StatelessWidget {
               },
               itemBuilder: (_) => [
                 if (!isDefault) const PopupMenuItem(value: 'default', child: Text('Als Standard')),
+                const PopupMenuItem(value: 'write', child: Text('Zeichen schreiben')),
                 const PopupMenuItem(value: 'rename', child: Text('Umbenennen')),
                 const PopupMenuItem(value: 'delete', child: Text('Löschen')),
               ],
@@ -165,4 +183,15 @@ Future<void> importBackup(BuildContext context) async {
   } on FormatException catch (error) {
     messenger.showSnackBar(SnackBar(content: Text(error.message)));
   }
+}
+
+/// Creates a profile and starts writing its characters with the pen.
+Future<void> newProfile(BuildContext context) async {
+  final name = await askText(context, 'Neue Handschrift', hint: 'Name, z. B. „Meine Schrift“', action: 'Anlegen');
+  if (name == null || !context.mounted) return;
+  final library = Services.handwriting;
+  final profile = library.createProfile(name.trim().isEmpty ? 'Meine Schrift' : name.trim());
+  // The profile page, with the writing session on top of it.
+  Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileDetailScreen(profileUid: profile.uid)));
+  await startCapture(context, profile.uid, CaptureSessions.missing(library, profile), title: 'Zeichen schreiben');
 }
