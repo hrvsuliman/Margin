@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../data/dates.dart';
 import '../data/entities.dart';
 import '../data/store.dart';
+import '../handwriting/handwriting_library.dart';
 import '../sync/sync_client.dart';
 import 'theme.dart';
 
@@ -12,6 +13,9 @@ import 'theme.dart';
 abstract final class Services {
   static late Store store;
   static late SyncClient sync;
+
+  /// Handwriting profiles (stay on this device, not synced).
+  static late HandwritingLibrary handwriting;
 }
 
 Store get store => Services.store;

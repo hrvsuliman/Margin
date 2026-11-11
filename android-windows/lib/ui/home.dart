@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'notes_screen.dart';
 import 'settings_screen.dart';
 import 'subjects_screen.dart';
 import 'tasks_screen.dart';
@@ -19,6 +20,7 @@ final _destinations = [
   const _Destination('Heute', Icons.wb_sunny_outlined, Icons.wb_sunny, TodayScreen()),
   const _Destination('Fächer', Icons.menu_book_outlined, Icons.menu_book, SubjectsScreen()),
   const _Destination('Aufgaben', Icons.check_circle_outline, Icons.check_circle, TasksScreen()),
+  const _Destination('Notizen', Icons.description_outlined, Icons.description, NotesScreen()),
 ];
 
 /// Bottom bar on phones, side rail on tablets and PCs.

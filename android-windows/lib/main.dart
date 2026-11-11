@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'data/store.dart';
+import 'handwriting/handwriting_library.dart';
 import 'sync/sync_client.dart';
 import 'ui/home.dart';
 import 'ui/theme.dart';
@@ -16,6 +17,7 @@ Future<void> main() async {
   Services.store = await Store.load(File('${folder.path}${Platform.pathSeparator}margin-data.json'));
   Services.sync = SyncClient(Services.store, File('${folder.path}${Platform.pathSeparator}sync.json'));
   await Services.sync.load();
+  Services.handwriting = await HandwritingLibrary.load(File('${folder.path}${Platform.pathSeparator}handwriting.json'));
   runApp(const MarginApp());
 }
 

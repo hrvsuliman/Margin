@@ -7,10 +7,11 @@ import 'package:path_provider/path_provider.dart';
 import '../data/dates.dart';
 import '../sync/sync_client.dart';
 import '../sync/sync_crypto.dart';
+import 'handwriting_screen.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
-const appVersion = '0.1.0';
+const appVersion = '0.2.0';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -19,7 +20,7 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Einstellungen')),
         body: ListenableBuilder(
-          listenable: Listenable.merge([Services.sync, Services.store]),
+          listenable: Listenable.merge([Services.sync, Services.store, Services.handwriting]),
           builder: (context, _) {
             final sync = Services.sync;
             final secondary = TextStyle(color: context.colors.secondaryInk);
@@ -87,6 +88,20 @@ class SettingsScreen extends StatelessWidget {
                     },
                   ),
                 ]),
+              const SectionTitle('Handschrift'),
+              Group(children: [
+                ListTile(
+                  leading: const Icon(Icons.draw_outlined),
+                  title: const Text('Handschrift'),
+                  subtitle: Text(
+                    Services.handwriting.profiles.isEmpty
+                        ? 'Noch keine – aus einem iPhone-Backup laden'
+                        : Services.handwriting.profiles.map((p) => p.displayName).join(', '),
+                  ),
+                  trailing: Icon(Icons.chevron_right, color: context.colors.faintInk),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HandwritingScreen())),
+                ),
+              ]),
               const SectionTitle('Daten'),
               Group(children: [
                 FutureBuilder<Directory>(
@@ -109,8 +124,8 @@ class SettingsScreen extends StatelessWidget {
                   leading: const Icon(Icons.info_outline),
                   title: Text('Margin $appVersion für ${Platform.isWindows ? 'Windows' : 'Android'}'),
                   subtitle: Text(
-                    'Fächer mit Pinnwand, Aufgaben, Hausaufgaben-Foto, Prüfungen. '
-                    'Kalender, Notizen mit Stift, Karteikarten und Fokus-Timer folgen in den nächsten Stufen.',
+                    'Fächer mit Pinnwand, Aufgaben, Hausaufgaben-Foto, Prüfungen, Notizen in deiner Handschrift mit PDF. '
+                    'Kalender, Karteikarten und Fokus-Timer folgen in den nächsten Stufen.',
                     style: secondary,
                   ),
                 ),

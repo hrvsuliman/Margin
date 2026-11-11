@@ -1,7 +1,7 @@
 name: margin
 description: Margin für Android und Windows – Schule, Notizen, Lernen. Gleicher Datenstand wie auf dem iPhone.
 publish_to: none
-version: 0.1.0+1
+version: 0.2.0+1
 
 environment:
   sdk: ^3.12.0
@@ -18,6 +18,8 @@ dependencies:
   image_picker: ^1.2.4
   image: ^4.12.0
   url_launcher: ^6.3.3
+  pdf: ^3.13.1
+  file_selector: ^1.1.0
   # Android only (on-device text recognition). On Windows the app offers pasting text instead.
   google_mlkit_text_recognition: ^0.17.1
 
