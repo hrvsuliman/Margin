@@ -29,7 +29,7 @@ class HandwritingFont {
       if (entry.key.runes.length != 1) continue;
       final list = [
         for (final input in entry.value)
-          if (makeVariant(input, analysis, penRatio) case final v?) v,
+          ?makeVariant(input, analysis, penRatio),
       ];
       if (list.isNotEmpty) built[entry.key] = list;
     }

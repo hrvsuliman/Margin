@@ -190,7 +190,7 @@ void openNote(BuildContext context, String uid) =>
 void openNewNote(BuildContext context, {String? subject}) {
   final note = store.add(Kind.note, {
     'seed': Random().nextInt(999999) + 1,
-    if (subject != null) 'subject': subject,
+    'subject': ?subject,
   });
   openNote(context, note.uid);
 }

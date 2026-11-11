@@ -14,7 +14,7 @@ abstract final class NoteRendering {
   /// "Mathematik · 02.11.2026"
   static String header(Note note, Store store) {
     final subject = store.subject(note.subject)?.name;
-    return [if (subject != null) subject, Fmt.numeric(note.noteDate)].join(' · ');
+    return [?subject, Fmt.numeric(note.noteDate)].join(' · ');
   }
 
   static NoteContent content(Note note, Store store, {String? title, String? body}) => NoteContent(
